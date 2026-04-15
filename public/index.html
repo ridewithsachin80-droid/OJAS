@@ -1,0 +1,1680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<meta name="theme-color" content="#1B3A6B"/>
+<title>InvestTrack — AOP Real Estate Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --navy:#1B3A6B;--blue:#2E5FA3;--blue-light:#DBEAFE;
+  --gold:#C49A22;--gold-light:#FEF3C7;
+  --green:#166534;--green-light:#DCFCE7;
+  --red:#991B1B;--red-light:#FEE2E2;
+  --orange:#92400E;--orange-light:#FEF3C7;
+  --bg:#F1F5FB;--card:#fff;--border:#DDE3EE;
+  --text:#0F172A;--muted:#64748B;
+  --sidebar:250px;
+}
+body{font-family:'Sora',sans-serif;background:var(--bg);color:var(--text);display:flex;min-height:100vh;font-size:14px}
+
+/* AUTH */
+#auth-screen{position:fixed;inset:0;background:linear-gradient(135deg,#0F1E3D 0%,#1B3A6B 50%,#2E5FA3 100%);display:flex;align-items:center;justify-content:center;z-index:999}
+.auth-box{background:#fff;border-radius:20px;padding:40px;width:100%;max-width:400px;box-shadow:0 25px 50px rgba(0,0,0,0.4)}
+.auth-logo{text-align:center;margin-bottom:28px}
+.auth-logo h1{font-size:26px;font-weight:700;color:var(--navy)}
+.auth-logo p{font-size:12px;color:var(--muted);margin-top:4px}
+
+/* APP LAYOUT */
+#app{display:flex;flex:1;display:none}
+
+/* SIDEBAR */
+#sidebar{width:var(--sidebar);background:var(--navy);display:flex;flex-direction:column;position:fixed;top:0;left:0;bottom:0;z-index:100;overflow-y:auto;transition:transform .3s}
+.brand{padding:20px 16px 14px;border-bottom:1px solid rgba(255,255,255,.1);display:flex;align-items:center;gap:10px}
+.brand-icon{width:36px;height:36px;background:var(--gold);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.brand h2{font-size:16px;font-weight:700;color:#fff}
+.brand p{font-size:10px;color:rgba(255,255,255,.5)}
+.role-badge{margin:10px 14px;padding:6px 10px;background:rgba(196,154,34,.15);border:1px solid rgba(196,154,34,.3);border-radius:6px;font-size:11px;color:var(--gold);font-weight:600}
+nav{padding:8px 10px;flex:1}
+.nav-section{font-size:9px;font-weight:700;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:1.2px;padding:12px 10px 4px}
+.nav-item{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:7px;cursor:pointer;color:rgba(255,255,255,.6);font-size:12px;font-weight:500;transition:all .2s;margin-bottom:1px;user-select:none}
+.nav-item:hover{background:rgba(255,255,255,.08);color:#fff}
+.nav-item.active{background:rgba(46,95,163,.9);color:#fff}
+.nav-icon{font-size:15px;width:18px;text-align:center;flex-shrink:0}
+.nav-badge{margin-left:auto;background:var(--gold);color:#fff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:10px}
+.sidebar-footer{padding:12px 14px;border-top:1px solid rgba(255,255,255,.08);font-size:10px;color:rgba(255,255,255,.3);display:flex;justify-content:space-between;align-items:center}
+.logout-btn{background:none;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.5);padding:4px 10px;border-radius:5px;cursor:pointer;font-size:10px;font-family:Sora,sans-serif;transition:all .2s}
+.logout-btn:hover{background:var(--red-light);color:var(--red);border-color:var(--red)}
+
+/* MAIN */
+#main{margin-left:var(--sidebar);flex:1;display:flex;flex-direction:column;min-width:0}
+#topbar{background:#fff;border-bottom:1px solid var(--border);padding:0 24px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;gap:12px}
+.topbar-left{display:flex;align-items:center;gap:10px}
+.breadcrumb{font-size:14px;font-weight:600;color:var(--navy)}
+.breadcrumb span{color:var(--muted);font-weight:400}
+.topbar-right{display:flex;gap:8px;align-items:center}
+#content{padding:24px;flex:1}
+.section{display:none}
+.section.active{display:block}
+
+/* COMPONENTS */
+.page-hd{margin-bottom:20px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.page-hd-left .page-title{font-size:20px;font-weight:700;color:var(--navy)}
+.page-hd-left .page-sub{font-size:12px;color:var(--muted);margin-top:3px}
+.page-hd-right{display:flex;gap:8px;flex-wrap:wrap}
+
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:22px}
+.stat-card{background:#fff;border-radius:12px;padding:18px;border:1px solid var(--border);position:relative;overflow:hidden}
+.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--c,var(--blue))}
+.stat-card .lbl{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.8px}
+.stat-card .val{font-size:22px;font-weight:700;color:var(--navy);margin-top:5px;font-family:'JetBrains Mono',monospace}
+.stat-card .sub{font-size:11px;color:var(--muted);margin-top:3px}
+.progress-wrap{background:#E5EAF2;border-radius:100px;height:6px;overflow:hidden;margin-top:6px}
+.progress-bar{height:100%;border-radius:100px;background:linear-gradient(90deg,var(--blue),var(--gold));transition:width .6s}
+
+.card{background:#fff;border-radius:12px;border:1px solid var(--border);margin-bottom:18px}
+.card-hd{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.card-title{font-size:13px;font-weight:700;color:var(--navy)}
+.card-body{padding:18px}
+
+/* BUTTONS */
+.btn{padding:8px 14px;border-radius:7px;font-family:Sora,sans-serif;font-size:12px;font-weight:600;cursor:pointer;border:none;transition:all .2s;white-space:nowrap}
+.btn-primary{background:var(--navy);color:#fff}.btn-primary:hover{background:var(--blue)}
+.btn-gold{background:var(--gold);color:#fff}.btn-gold:hover{background:#a07c10}
+.btn-green{background:#15803D;color:#fff}.btn-green:hover{background:#166534}
+.btn-red{background:var(--red);color:#fff}.btn-red:hover{background:#7f1d1d}
+.btn-outline{background:transparent;border:1.5px solid var(--border);color:var(--text)}.btn-outline:hover{border-color:var(--blue);color:var(--blue)}
+.btn-ghost{background:rgba(0,0,0,.04);color:var(--muted)}.btn-ghost:hover{background:rgba(0,0,0,.08);color:var(--text)}
+.btn-sm{padding:5px 10px;font-size:11px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+
+/* TABLE */
+.tbl-wrap{overflow-x:auto}
+table.dt{width:100%;border-collapse:collapse;font-size:12px}
+table.dt th{background:#F8FAFC;padding:9px 14px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;border-bottom:1px solid var(--border);white-space:nowrap}
+table.dt td{padding:11px 14px;border-bottom:1px solid #F0F4FA;vertical-align:middle}
+table.dt tr:last-child td{border-bottom:none}
+table.dt tr:hover td{background:#FAFBFF}
+.mono{font-family:'JetBrains Mono',monospace;font-size:11px}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700}
+.badge-blue{background:var(--blue-light);color:#1E40AF}
+.badge-green{background:var(--green-light);color:var(--green)}
+.badge-gold{background:var(--gold-light);color:#78350F}
+.badge-red{background:var(--red-light);color:var(--red)}
+.badge-gray{background:#F1F5F9;color:var(--muted)}
+.badge-orange{background:var(--orange-light);color:var(--orange)}
+
+/* FORMS */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.form-grid.cols3{grid-template-columns:1fr 1fr 1fr}
+.fg{display:flex;flex-direction:column;gap:5px}
+.fg.full{grid-column:1/-1}
+.fg label{font-size:11px;font-weight:600;color:var(--navy)}
+.fg input,.fg select,.fg textarea{padding:8px 11px;border:1.5px solid var(--border);border-radius:7px;font-family:Sora,sans-serif;font-size:12px;color:var(--text);transition:border .2s;background:#fff;width:100%}
+.fg input:focus,.fg select:focus,.fg textarea:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(46,95,163,.1)}
+.fg input[readonly]{background:#F8FAFC;color:var(--muted)}
+.fg textarea{resize:vertical;min-height:70px}
+.form-actions{margin-top:18px;display:flex;gap:8px;flex-wrap:wrap}
+.input-file-area{border:2px dashed var(--border);border-radius:8px;padding:20px;text-align:center;cursor:pointer;transition:border .2s;position:relative}
+.input-file-area:hover{border-color:var(--blue)}
+.input-file-area input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
+.input-file-area .ifa-icon{font-size:28px;margin-bottom:6px}
+.input-file-area p{font-size:12px;color:var(--muted)}
+
+/* MODAL */
+#modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:500;align-items:center;justify-content:center;padding:16px}
+#modal-bg.open{display:flex}
+#modal-box{background:#fff;border-radius:16px;width:100%;max-width:680px;max-height:92vh;overflow-y:auto;padding:28px;animation:slideUp .25s ease}
+@keyframes slideUp{from{transform:translateY(24px);opacity:0}to{transform:translateY(0);opacity:1}}
+.modal-title{font-size:17px;font-weight:700;color:var(--navy);margin-bottom:18px;display:flex;justify-content:space-between;align-items:center}
+.modal-close{cursor:pointer;font-size:22px;color:var(--muted);line-height:1;background:none;border:none;padding:0}
+
+/* TOAST */
+#toast{position:fixed;bottom:22px;right:22px;padding:12px 18px;border-radius:10px;font-size:12px;font-weight:600;transform:translateY(60px);opacity:0;transition:all .3s;z-index:999;max-width:320px}
+#toast.show{transform:translateY(0);opacity:1}
+#toast.success{background:var(--navy);color:#fff}
+#toast.error{background:var(--red);color:#fff}
+#toast.info{background:var(--blue);color:#fff}
+
+/* TIMELINE */
+.tl{position:relative;padding-left:26px}
+.tl::before{content:'';position:absolute;left:9px;top:0;bottom:0;width:2px;background:var(--border)}
+.tl-item{position:relative;margin-bottom:16px}
+.tl-dot{position:absolute;left:-23px;top:3px;width:14px;height:14px;border-radius:50%;border:2px solid #fff;background:var(--muted)}
+.tl-dot.done{background:var(--green)}
+.tl-dot.active{background:var(--gold);box-shadow:0 0 0 4px rgba(196,154,34,.25)}
+.tl-title{font-size:12px;font-weight:600}
+.tl-sub{font-size:11px;color:var(--muted);margin-top:2px}
+
+/* PHOTO GRID */
+.photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-top:12px}
+.photo-thumb{border-radius:8px;overflow:hidden;aspect-ratio:4/3;background:#F0F4FA;position:relative;cursor:pointer}
+.photo-thumb img{width:100%;height:100%;object-fit:cover;transition:transform .3s}
+.photo-thumb:hover img{transform:scale(1.05)}
+.photo-caption{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.6);color:#fff;font-size:10px;padding:5px 7px}
+
+/* PROJECT CARD */
+.project-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.project-card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:18px;cursor:pointer;transition:all .2s;position:relative;overflow:hidden}
+.project-card:hover{box-shadow:0 8px 25px rgba(0,0,0,.1);transform:translateY(-2px)}
+.project-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--navy),var(--gold))}
+.pc-code{font-size:10px;font-weight:700;color:var(--gold);letter-spacing:.8px;text-transform:uppercase}
+.pc-name{font-size:15px;font-weight:700;color:var(--navy);margin:4px 0}
+.pc-loc{font-size:11px;color:var(--muted)}
+.pc-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.pc-stat{background:#F8FAFC;border-radius:7px;padding:8px;text-align:center}
+.pc-stat .n{font-size:14px;font-weight:700;color:var(--navy);font-family:'JetBrains Mono',monospace}
+.pc-stat .l{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-top:1px}
+.pc-status{position:absolute;top:14px;right:14px}
+
+/* CERTIFICATE */
+.cert-wrap{border:3px solid var(--gold);border-radius:12px;padding:32px;background:linear-gradient(135deg,#FFFDF5,#FFF8E7);text-align:center;position:relative}
+.cert-wrap::before{content:'';position:absolute;inset:6px;border:1px solid rgba(196,154,34,.3);border-radius:8px;pointer-events:none}
+.cert-star{font-size:36px;color:var(--gold);margin-bottom:8px}
+.cert-project{font-size:18px;font-weight:700;color:var(--navy)}
+.cert-type{font-size:28px;font-weight:700;color:var(--gold);margin:12px 0 8px}
+.cert-name{font-size:22px;font-weight:700;color:var(--navy)}
+.cert-table{display:grid;grid-template-columns:auto 1fr;gap:6px 20px;text-align:left;margin:16px auto;max-width:440px;font-size:12px}
+.cert-table .cl{font-weight:600;color:var(--muted)}
+.cert-table .cv{font-weight:600;color:var(--navy)}
+.cert-seal{margin-top:16px;border-top:1px dashed var(--gold);padding-top:12px;font-size:10px;color:var(--muted)}
+.cert-no{position:absolute;top:14px;right:18px;font-size:10px;color:var(--muted);font-family:monospace}
+
+/* ACCOUNTS */
+.txn-type-in{color:var(--green);font-weight:700}
+.txn-type-out{color:var(--red);font-weight:700}
+.profit-box{background:linear-gradient(135deg,var(--navy),var(--blue));color:#fff;border-radius:12px;padding:20px;margin-bottom:16px}
+.profit-box .label{font-size:10px;opacity:.6;text-transform:uppercase;letter-spacing:.8px}
+.profit-box .value{font-size:24px;font-weight:700;font-family:'JetBrains Mono',monospace;margin-top:4px}
+
+/* REPORT */
+.report-section{background:#fff;border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:16px}
+.report-section h3{font-size:13px;font-weight:700;color:var(--navy);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+
+/* RESPONSIVE */
+#menu-toggle{display:none;position:fixed;top:12px;left:12px;z-index:300;background:var(--navy);color:#fff;border:none;cursor:pointer;padding:8px 10px;border-radius:7px;font-size:17px}
+@media(max-width:768px){
+  #sidebar{transform:translateX(-100%)}
+  #sidebar.open{transform:translateX(0)}
+  #main{margin-left:0}
+  #menu-toggle{display:block}
+  .form-grid{grid-template-columns:1fr}
+  .form-grid.cols3{grid-template-columns:1fr}
+  .stat-grid{grid-template-columns:1fr 1fr}
+  .project-grid{grid-template-columns:1fr}
+  #modal-box{padding:18px}
+  .cert-type{font-size:18px}
+}
+
+.empty-state{text-align:center;padding:40px 20px;color:var(--muted)}
+.empty-state .ei{font-size:36px;margin-bottom:10px}
+.empty-state p{font-size:13px}
+.divider{border:none;border-top:1px solid var(--border);margin:16px 0}
+.text-green{color:var(--green)} .text-red{color:var(--red)} .text-gold{color:var(--gold)} .text-navy{color:var(--navy)}
+.fw7{font-weight:700} .fz11{font-size:11px} .fz12{font-size:12px} .fz13{font-size:13px}
+.mt8{margin-top:8px} .mt12{margin-top:12px} .mt16{margin-top:16px} .mt20{margin-top:20px}
+.flex{display:flex} .flex-between{display:flex;justify-content:space-between;align-items:center} .gap8{gap:8px} .flex-wrap{flex-wrap:wrap}
+</style>
+</head>
+<body>
+
+<button id="menu-toggle" onclick="toggleSidebar()">☰</button>
+
+<!-- AUTH SCREEN -->
+<div id="auth-screen">
+  <div class="auth-box">
+    <div class="auth-logo">
+      <h1>🏗 InvestTrack</h1>
+      <p>AOP Real Estate Investment Platform</p>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:18px">
+      <div id="role-tab-admin" onclick="setRoleTab('admin')" style="text-align:center;padding:8px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:600;background:var(--navy);color:#fff;transition:all .2s">🔑 Admin</div>
+      <div id="role-tab-investor" onclick="setRoleTab('investor')" style="text-align:center;padding:8px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:600;background:#F1F5F9;color:var(--muted);transition:all .2s">💼 Investor</div>
+    </div>
+    <div id="login-hint-admin" style="font-size:11px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:6px;padding:8px 10px;margin-bottom:14px;color:#1E40AF">Admin credentials are set via Railway environment variables. Change them in Settings after login.</div>
+    <div id="login-hint-investor" style="font-size:11px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:6px;padding:8px 10px;margin-bottom:14px;color:#166534;display:none">Your login credentials are provided by your project administrator. Contact them if you don't have access.</div>
+    <div class="fg" style="margin-bottom:12px">
+      <label>Email Address</label>
+      <input type="email" id="login-email" placeholder="your@email.com" autocomplete="email"/>
+    </div>
+    <div class="fg" style="margin-bottom:20px">
+      <label>Password</label>
+      <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"/>
+    </div>
+    <button class="btn btn-primary" style="width:100%;padding:11px" onclick="doLogin()" id="login-btn">Sign In →</button>
+    <p id="login-error" style="color:var(--red);font-size:11px;margin-top:10px;text-align:center"></p>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <!-- SIDEBAR -->
+  <div id="sidebar">
+    <div class="brand">
+      <div class="brand-icon">🏗</div>
+      <div><h2>InvestTrack</h2><p>AOP Platform</p></div>
+    </div>
+    <div class="role-badge" id="role-badge">Loading…</div>
+    <nav id="sidenav"></nav>
+    <div class="sidebar-footer">
+      <span id="user-name-footer">—</span>
+      <button class="logout-btn" onclick="doLogout()">Logout</button>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div id="main">
+    <div id="topbar">
+      <div class="topbar-left">
+        <span class="breadcrumb" id="page-title">Dashboard</span>
+      </div>
+      <div class="topbar-right" id="topbar-actions"></div>
+    </div>
+    <div id="content">
+
+      <!-- ═══ ADMIN: OVERVIEW DASHBOARD ═══ -->
+      <div class="section" id="sec-overview">
+        <div class="page-hd">
+          <div class="page-hd-left"><div class="page-title">Overview Dashboard</div><div class="page-sub">All projects at a glance</div></div>
+          <div class="page-hd-right">
+            <button class="btn btn-primary" onclick="openModal('project-form')">+ New Project</button>
+          </div>
+        </div>
+        <div class="stat-grid" id="overview-stats"></div>
+        <div class="page-title fz13 fw7 text-navy" style="margin-bottom:12px">All Projects</div>
+        <div class="project-grid" id="overview-projects"></div>
+      </div>
+
+      <!-- ═══ ADMIN: PROJECT DETAIL ═══ -->
+      <div class="section" id="sec-project">
+        <div class="page-hd">
+          <div class="page-hd-left">
+            <div class="page-title" id="proj-detail-name">Project</div>
+            <div class="page-sub" id="proj-detail-loc"></div>
+          </div>
+          <div class="page-hd-right">
+            <button class="btn btn-outline btn-sm" onclick="showSection('overview')">← All Projects</button>
+            <button class="btn btn-ghost btn-sm" onclick="openModal('project-edit')">Edit Project</button>
+          </div>
+        </div>
+        <!-- Project sub-tabs -->
+        <div style="display:flex;gap:4px;border-bottom:2px solid var(--border);margin-bottom:20px;overflow-x:auto">
+          <button class="ptab active" data-tab="pt-summary" onclick="switchPTab(this,'pt-summary')">Summary</button>
+          <button class="ptab" data-tab="pt-investors" onclick="switchPTab(this,'pt-investors')">Investors</button>
+          <button class="ptab" data-tab="pt-accounts" onclick="switchPTab(this,'pt-accounts')">Accounts</button>
+          <button class="ptab" data-tab="pt-milestones" onclick="switchPTab(this,'pt-milestones')">Milestones</button>
+          <button class="ptab" data-tab="pt-documents" onclick="switchPTab(this,'pt-documents')">Documents</button>
+          <button class="ptab" data-tab="pt-stages" onclick="switchPTab(this,'pt-stages')">Stage Updates</button>
+          <button class="ptab" data-tab="pt-sales" onclick="switchPTab(this,'pt-sales')">Site Sales</button>
+          <button class="ptab" data-tab="pt-report" onclick="switchPTab(this,'pt-report')">Report</button>
+        </div>
+        <style>.ptab{background:none;border:none;padding:8px 14px;cursor:pointer;font-family:Sora,sans-serif;font-size:12px;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap}.ptab.active{color:var(--navy);border-bottom-color:var(--navy);font-weight:700}</style>
+
+        <div id="pt-summary" class="ptab-content active">
+          <div class="stat-grid" id="proj-stats"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+            <div class="card"><div class="card-hd"><span class="card-title">Project Details</span></div><div class="card-body" id="proj-info-box"></div></div>
+            <div class="card"><div class="card-hd"><span class="card-title">Capital Progress</span></div><div class="card-body" id="proj-capital-box"></div></div>
+          </div>
+        </div>
+
+        <div id="pt-investors" class="ptab-content" style="display:none">
+          <div class="flex-between mb-12" style="margin-bottom:12px">
+            <div class="card-title">Investor Register</div>
+            <button class="btn btn-primary btn-sm" onclick="openModal('investment-form')">+ Add Investor</button>
+          </div>
+          <div class="card"><div class="tbl-wrap"><table class="dt" id="inv-table"><thead><tr><th>ID</th><th>Name</th><th>PAN</th><th>Amount (₹)</th><th>Pool Share</th><th>Profit Entitlement</th><th>Date</th><th>KYC</th><th>Login</th><th>Actions</th></tr></thead><tbody id="inv-body"></tbody></table></div></div>
+        </div>
+
+        <div id="pt-accounts" class="ptab-content" style="display:none">
+          <div class="flex-between" style="margin-bottom:12px">
+            <div class="card-title">Accounts & Transactions</div>
+            <button class="btn btn-primary btn-sm" onclick="openModal('txn-form')">+ Add Entry</button>
+          </div>
+          <div class="stat-grid" id="acct-stats"></div>
+          <div class="card"><div class="tbl-wrap"><table class="dt" id="txn-table"><thead><tr><th>Date</th><th>Type</th><th>Category</th><th>Description</th><th>Reference</th><th>Amount (₹)</th><th></th></tr></thead><tbody id="txn-body"></tbody></table></div></div>
+        </div>
+
+        <div id="pt-milestones" class="ptab-content" style="display:none">
+          <div class="card"><div class="card-hd"><span class="card-title">Project Milestones</span><span class="fz11 text-gold">Click a milestone to update</span></div><div class="card-body"><div class="tl" id="ms-list"></div></div></div>
+        </div>
+
+        <div id="pt-documents" class="ptab-content" style="display:none">
+          <div class="flex-between" style="margin-bottom:12px">
+            <div class="card-title">Project Documents</div>
+            <button class="btn btn-primary btn-sm" onclick="openModal('doc-upload')">+ Upload Document</button>
+          </div>
+          <div id="docs-list"></div>
+        </div>
+
+        <div id="pt-stages" class="ptab-content" style="display:none">
+          <div class="flex-between" style="margin-bottom:12px">
+            <div class="card-title">Stage Updates & Photos</div>
+            <button class="btn btn-primary btn-sm" onclick="openModal('stage-form')">+ Add Update</button>
+          </div>
+          <div id="stages-list"></div>
+        </div>
+
+        <div id="pt-sales" class="ptab-content" style="display:none">
+          <div class="flex-between" style="margin-bottom:12px">
+            <div class="card-title">Site Sales</div>
+            <button class="btn btn-green btn-sm" onclick="openModal('sale-form')">+ Record Sale</button>
+          </div>
+          <div class="stat-grid" id="sales-stats"></div>
+          <div class="card"><div class="tbl-wrap"><table class="dt" id="sales-table"><thead><tr><th>Plot</th><th>Customer</th><th>PAN</th><th>Amount (₹)</th><th>Sale Date</th><th>Doc No.</th><th>Documents</th><th>Actions</th></tr></thead><tbody id="sales-body"></tbody></table></div></div>
+        </div>
+
+        <div id="pt-report" class="ptab-content" style="display:none">
+          <div class="flex-between" style="margin-bottom:12px">
+            <div class="card-title">Project Report</div>
+            <button class="btn btn-gold btn-sm" onclick="printReport()">🖨 Print Report</button>
+          </div>
+          <div id="report-content"></div>
+        </div>
+      </div>
+
+      <!-- ═══ INVESTOR: MY DASHBOARD ═══ -->
+      <div class="section" id="sec-investor-home">
+        <div class="page-hd"><div class="page-hd-left"><div class="page-title">My Investments</div><div class="page-sub">Your portfolio overview</div></div></div>
+        <div class="stat-grid" id="inv-home-stats"></div>
+        <div class="project-grid" id="inv-project-cards"></div>
+      </div>
+
+      <!-- ═══ INVESTOR: PROJECT VIEW ═══ -->
+      <div class="section" id="sec-inv-project">
+        <div class="page-hd">
+          <div class="page-hd-left"><div class="page-title" id="inv-proj-name">Project</div><div class="page-sub" id="inv-proj-loc"></div></div>
+          <div class="page-hd-right">
+            <button class="btn btn-outline btn-sm" onclick="showSection('investor-home')">← My Investments</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:4px;border-bottom:2px solid var(--border);margin-bottom:20px;overflow-x:auto">
+          <button class="ptab active" onclick="switchITab(this,'it-overview')">Overview</button>
+          <button class="ptab" onclick="switchITab(this,'it-certificate')">Certificate</button>
+          <button class="ptab" onclick="switchITab(this,'it-milestones')">Project Status</button>
+          <button class="ptab" onclick="switchITab(this,'it-stages')">Updates & Photos</button>
+          <button class="ptab" onclick="switchITab(this,'it-documents')">Documents</button>
+          <button class="ptab" onclick="switchITab(this,'it-report')">My Report</button>
+        </div>
+        <div id="it-overview" class="itab-content active">
+          <div class="stat-grid" id="inv-proj-stats"></div>
+          <div class="card"><div class="card-hd"><span class="card-title">My Investment Details</span></div><div class="card-body" id="inv-detail-box"></div></div>
+          <div class="card mt16"><div class="card-hd"><span class="card-title">Profit Projection</span></div><div class="card-body" id="inv-profit-box"></div></div>
+        </div>
+        <div id="it-certificate" class="itab-content" style="display:none">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+            <div><div class="card-title mb-8 fw7" style="margin-bottom:8px">Investment Certificate</div><div class="cert-wrap" id="cert-ack"></div></div>
+            <div><div class="card-title mb-8 fw7" style="margin-bottom:8px">Profit Entitlement</div><div class="cert-wrap" id="cert-profit"></div></div>
+          </div>
+          <div class="form-actions mt16"><button class="btn btn-gold" onclick="window.print()">🖨 Print Certificates</button></div>
+        </div>
+        <div id="it-milestones" class="itab-content" style="display:none"><div class="card"><div class="card-hd"><span class="card-title">Project Milestones</span></div><div class="card-body"><div class="tl" id="inv-ms-list"></div></div></div></div>
+        <div id="it-stages" class="itab-content" style="display:none"><div id="inv-stages-list"></div></div>
+        <div id="it-documents" class="itab-content" style="display:none"><div id="inv-docs-list"></div></div>
+        <div id="it-report" class="itab-content" style="display:none"><div id="inv-report-content"></div></div>
+      </div>
+
+      <!-- ═══ ADMIN: USERS ═══ -->
+      <div class="section" id="sec-users">
+        <div class="page-hd">
+          <div class="page-hd-left"><div class="page-title">User Management</div><div class="page-sub">Manage admin and investor accounts</div></div>
+          <div class="page-hd-right"><button class="btn btn-primary" onclick="openModal('user-form')">+ Add User</button></div>
+        </div>
+        <div class="card"><div class="tbl-wrap"><table class="dt" id="users-table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>PAN</th><th>Mobile</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead><tbody id="users-body"></tbody></table></div></div>
+      </div>
+
+      <!-- ═══ ADMIN: GLOBAL REPORTS ═══ -->
+      <div class="section" id="sec-reports">
+        <div class="page-hd"><div class="page-hd-left"><div class="page-title">Global Reports</div><div class="page-sub">Across all projects</div></div><div class="page-hd-right"><button class="btn btn-gold btn-sm" onclick="printReport()">🖨 Print</button></div></div>
+        <div id="global-report-content"></div>
+      </div>
+
+      <!-- ═══ SETTINGS ═══ -->
+      <div class="section" id="sec-settings">
+        <div class="page-hd"><div class="page-hd-left"><div class="page-title">Settings</div><div class="page-sub">Manage your profile and notification channels</div></div></div>
+
+        <!-- Admin Profile (admin only) -->
+        <div class="card" id="admin-profile-card" style="max-width:600px;display:none">
+          <div class="card-hd"><span class="card-title">👤 Admin Profile</span><span class="fz11 text-muted">Your login identity</span></div>
+          <div class="card-body">
+            <div class="form-grid">
+              <div class="fg"><label>Full Name *</label><input id="ap-name"/></div>
+              <div class="fg"><label>Email (Login) *</label><input type="email" id="ap-email"/></div>
+              <div class="fg"><label>Mobile</label><input id="ap-mobile" placeholder="For WhatsApp notifications"/></div>
+              <div class="fg"><label>PAN</label><input id="ap-pan"/></div>
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-primary" onclick="saveAdminProfile()">Save Profile</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Change Password -->
+        <div class="card" style="max-width:600px">
+          <div class="card-hd"><span class="card-title">🔑 Change Password</span></div>
+          <div class="card-body">
+            <div class="form-grid">
+              <div class="fg"><label>Current Password</label><input type="password" id="s-curr-pw"/></div>
+              <div class="fg"><label>New Password</label><input type="password" id="s-new-pw"/></div>
+              <div class="fg full"><label>Confirm New Password</label><input type="password" id="s-confirm-pw"/></div>
+            </div>
+            <div class="form-actions"><button class="btn btn-primary" onclick="changePw()">Update Password</button></div>
+          </div>
+        </div>
+
+        <!-- Notification Config (admin only) -->
+        <div class="card" id="notif-config-card" style="max-width:600px;display:none">
+          <div class="card-hd"><span class="card-title">🔔 Notification Channels</span><div id="notif-status-badges" style="display:flex;gap:6px"></div></div>
+          <div class="card-body">
+            <div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;padding:12px;margin-bottom:16px;font-size:12px;color:#92400E">
+              ⚙️ Notification credentials are set as <strong>Railway environment variables</strong> (not stored in the app for security). Add them in Railway → Your App → Variables.
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+              <!-- Email config -->
+              <div style="border:1px solid var(--border);border-radius:10px;padding:16px">
+                <div style="font-size:14px;font-weight:700;color:var(--navy);margin-bottom:10px">📧 Email (Gmail/SMTP)</div>
+                <div id="email-status" style="margin-bottom:12px"></div>
+                <div style="font-size:11px;color:var(--muted);background:#F8FAFC;padding:10px;border-radius:6px;font-family:monospace">
+                  EMAIL_USER=you@gmail.com<br>
+                  EMAIL_PASS=app_password<br>
+                  EMAIL_FROM_NAME=InvestTrack<br>
+                  EMAIL_HOST=smtp.gmail.com<br>
+                  EMAIL_PORT=587
+                </div>
+                <p style="font-size:10px;color:var(--muted);margin-top:8px">For Gmail: Enable 2FA → Generate App Password at myaccount.google.com/apppasswords</p>
+              </div>
+              <!-- WhatsApp config -->
+              <div style="border:1px solid var(--border);border-radius:10px;padding:16px">
+                <div style="font-size:14px;font-weight:700;color:var(--navy);margin-bottom:10px">💬 WhatsApp (Twilio)</div>
+                <div id="wa-status" style="margin-bottom:12px"></div>
+                <div style="font-size:11px;color:var(--muted);background:#F8FAFC;padding:10px;border-radius:6px;font-family:monospace">
+                  TWILIO_ACCOUNT_SID=ACxxx<br>
+                  TWILIO_AUTH_TOKEN=xxx<br>
+                  TWILIO_WHATSAPP_FROM=whatsapp:+14155238886<br>
+                  APP_URL=https://your.railway.app
+                </div>
+                <p style="font-size:10px;color:var(--muted);margin-top:8px">Get Twilio SID & Token at console.twilio.com. Use sandbox number for testing.</p>
+              </div>
+            </div>
+
+            <!-- Test notifications -->
+            <div style="border-top:1px solid var(--border);padding-top:16px">
+              <div class="card-title" style="margin-bottom:12px">🧪 Test Notifications</div>
+              <div class="form-grid">
+                <div class="fg"><label>Test Email Address</label><input id="test-email" type="email" placeholder="test@example.com"/></div>
+                <div class="fg"><label>Test Mobile (WhatsApp)</label><input id="test-mobile" placeholder="10-digit mobile no."/></div>
+              </div>
+              <div class="form-actions">
+                <button class="btn btn-outline" onclick="sendTestNotif('email')">📧 Test Email</button>
+                <button class="btn btn-outline" onclick="sendTestNotif('whatsapp')">💬 Test WhatsApp</button>
+                <button class="btn btn-primary" onclick="sendTestNotif('both')">Test Both</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Investor: just password change -->
+        <div class="card" id="investor-hint-card" style="max-width:600px;display:none">
+          <div class="card-hd"><span class="card-title">ℹ️ Account Info</span></div>
+          <div class="card-body">
+            <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 16px;font-size:13px" id="inv-profile-info"></div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<!-- MODAL -->
+<div id="modal-bg" onclick="if(event.target===this)closeModal()">
+  <div id="modal-box"><div id="modal-inner"></div></div>
+</div>
+<div id="toast"></div>
+<script>
+// ════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════
+let token = sessionStorage.getItem('it_token') || '';
+let currentUser = null;
+let currentProject = null;
+let currentInvestment = null;
+
+// ════════════════════════════════════════
+// API HELPER
+// ════════════════════════════════════════
+async function api(method, path, body, isFormData) {
+  const opts = { method, headers: { 'Authorization': `Bearer ${token}` } };
+  if (isFormData) { opts.body = body; }
+  else if (body) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+  const r = await fetch('/api' + path, opts);
+  if (r.status === 401) { doLogout(); return null; }
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
+function toast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = `show ${type}`;
+  setTimeout(() => t.className = '', 3000);
+}
+
+function fmtMoney(n) { return '₹' + (Number(n)||0).toLocaleString('en-IN'); }
+function fmtDate(d) { return d ? new Date(d).toLocaleDateString('en-IN', {day:'2-digit',month:'short',year:'numeric'}) : '—'; }
+function pct(n, t) { return t > 0 ? (n/t*100).toFixed(2) : '0.00'; }
+
+// ════════════════════════════════════════
+// AUTH
+// ════════════════════════════════════════
+async function doLogin() {
+  const btn = document.getElementById('login-btn');
+  btn.textContent = 'Signing in…'; btn.disabled = true;
+  try {
+    const email = document.getElementById('login-email').value;
+    const password = document.getElementById('login-password').value;
+    const data = await fetch('/api/auth/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({email,password}) });
+    const json = await data.json();
+    if (!data.ok) throw new Error(json.error || 'Login failed');
+    token = json.token;
+    currentUser = json.user;
+    sessionStorage.setItem('it_token', token);
+    sessionStorage.setItem('it_user', JSON.stringify(currentUser));
+    bootApp();
+  } catch (e) {
+    document.getElementById('login-error').textContent = e.message;
+  } finally { btn.textContent = 'Sign In →'; btn.disabled = false; }
+}
+
+function doLogout() {
+  token = ''; currentUser = null;
+  sessionStorage.clear();
+  document.getElementById('auth-screen').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+}
+
+async function bootApp() {
+  if (!token) return;
+  if (!currentUser) {
+    const saved = sessionStorage.getItem('it_user');
+    if (saved) currentUser = JSON.parse(saved);
+    else { doLogout(); return; }
+  }
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  buildNav();
+  document.getElementById('role-badge').textContent = currentUser.role === 'admin' ? '🔑 Administrator' : '💼 Investor Portal';
+  document.getElementById('user-name-footer').textContent = currentUser.name;
+  if (currentUser.role === 'admin') { loadOverview(); showSection('overview'); }
+  else { loadInvestorHome(); showSection('investor-home'); }
+}
+
+// ════════════════════════════════════════
+// NAV
+// ════════════════════════════════════════
+function buildNav() {
+  const nav = document.getElementById('sidenav');
+  const isAdmin = currentUser.role === 'admin';
+  if (isAdmin) {
+    nav.innerHTML = `
+      <div class="nav-section">Projects</div>
+      <div class="nav-item active" onclick="navTo('overview')"><span class="nav-icon">📊</span> All Projects</div>
+      <div class="nav-section">Administration</div>
+      <div class="nav-item" onclick="navTo('users')"><span class="nav-icon">👥</span> User Management</div>
+      <div class="nav-item" onclick="navTo('reports')"><span class="nav-icon">📑</span> Global Reports</div>
+      <div class="nav-section">Account</div>
+      <div class="nav-item" onclick="navTo('settings')"><span class="nav-icon">⚙️</span> Settings</div>`;
+  // Patch navTo for settings in investor nav too
+  } else {
+    nav.innerHTML = `
+      <div class="nav-section">Portfolio</div>
+      <div class="nav-item active" onclick="navTo('investor-home')"><span class="nav-icon">🏠</span> My Investments</div>
+      <div class="nav-section">Account</div>
+      <div class="nav-item" onclick="navTo('settings')"><span class="nav-icon">⚙️</span> Settings</div>`;
+  }
+}
+
+function navTo(sec) {
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  event.currentTarget?.classList?.add('active');
+  const map = { overview: loadOverview, users: loadUsers, reports: loadGlobalReports, 'investor-home': loadInvestorHome, settings: loadSettingsPage };
+  if (map[sec]) map[sec]();
+  showSection(sec);
+}
+
+function showSection(id) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  const el = document.getElementById('sec-' + id);
+  if (el) el.classList.add('active');
+  document.getElementById('sidebar').classList.remove('open');
+}
+
+function switchPTab(btn, id) {
+  document.querySelectorAll('.ptab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.ptab-content').forEach(c => c.style.display = 'none');
+  document.getElementById(id).style.display = 'block';
+  const loaders = { 'pt-investors': loadProjectInvestors, 'pt-accounts': loadProjectAccounts, 'pt-milestones': loadMilestones, 'pt-documents': loadDocuments, 'pt-stages': loadStages, 'pt-sales': loadSales, 'pt-report': loadProjectReport };
+  if (loaders[id] && currentProject) loaders[id](currentProject.id);
+}
+
+function switchITab(btn, id) {
+  document.querySelectorAll('.ptab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.itab-content').forEach(c => c.style.display = 'none');
+  document.getElementById(id).style.display = 'block';
+  if (id === 'it-milestones' && currentProject) loadInvMilestones(currentProject.id);
+  if (id === 'it-stages' && currentProject) loadInvStages(currentProject.id);
+  if (id === 'it-documents' && currentProject) loadInvDocuments(currentProject.id);
+  if (id === 'it-report' && currentProject) loadInvReport(currentProject.id);
+}
+
+function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); }
+
+// ════════════════════════════════════════
+// MODAL
+// ════════════════════════════════════════
+function openModal(type, data) {
+  document.getElementById('modal-bg').classList.add('open');
+  const inner = document.getElementById('modal-inner');
+  if (type === 'project-form') inner.innerHTML = projectFormHTML();
+  else if (type === 'project-edit') inner.innerHTML = projectFormHTML(currentProject);
+  else if (type === 'investment-form') inner.innerHTML = investmentFormHTML(data);
+  else if (type === 'investment-edit') inner.innerHTML = investmentFormHTML(data);
+  else if (type === 'txn-form') inner.innerHTML = txnFormHTML(data);
+  else if (type === 'doc-upload') inner.innerHTML = docUploadHTML();
+  else if (type === 'stage-form') inner.innerHTML = stageFormHTML();
+  else if (type === 'sale-form') inner.innerHTML = saleFormHTML();
+  else if (type === 'user-form') inner.innerHTML = userFormHTML(data);
+  else if (type === 'milestone-edit') inner.innerHTML = milestoneFormHTML(data);
+  else if (type === 'photo-view') inner.innerHTML = photoViewHTML(data);
+}
+function closeModal() { document.getElementById('modal-bg').classList.remove('open'); }
+
+// ════════════════════════════════════════
+// ADMIN: OVERVIEW
+// ════════════════════════════════════════
+async function loadOverview() {
+  try {
+    const [projects, report] = await Promise.all([
+      api('GET', '/projects'),
+      api('GET', '/reports/overview')
+    ]);
+    // Stats
+    const totalCap = (report?.investments || []).reduce((s, i) => s + Number(i.total), 0);
+    const totalSales = (report?.sales || []).reduce((s, s2) => s + Number(s2.total), 0);
+    document.getElementById('overview-stats').innerHTML = `
+      <div class="stat-card" style="--c:var(--navy)"><div class="lbl">Total Projects</div><div class="val">${projects.length}</div></div>
+      <div class="stat-card" style="--c:var(--gold)"><div class="lbl">Total Capital</div><div class="val">${fmtMoney(totalCap)}</div></div>
+      <div class="stat-card" style="--c:var(--green)"><div class="lbl">Total Sales</div><div class="val">${fmtMoney(totalSales)}</div></div>
+      <div class="stat-card" style="--c:var(--blue)"><div class="lbl">Total Investors</div><div class="val">${(report?.investments||[]).reduce((s,i)=>s+Number(i.count),0)}</div></div>`;
+    // Project cards
+    document.getElementById('overview-projects').innerHTML = projects.length === 0 
+      ? '<div class="empty-state"><div class="ei">🏗</div><p>No projects yet. Click "+ New Project" to start.</p></div>'
+      : projects.map(p => {
+          const statusBadge = p.status === 'active' ? 'badge-green' : p.status === 'completed' ? 'badge-blue' : 'badge-red';
+          return `<div class="project-card" onclick="openProject(${p.id})">
+            <span class="badge ${statusBadge} pc-status">${p.status}</span>
+            <div class="pc-code">${p.code||p.id}</div>
+            <div class="pc-name">${p.name}</div>
+            <div class="pc-loc">📍 ${p.location||'—'}</div>
+            <div class="pc-stats">
+              <div class="pc-stat"><div class="n">${p.investor_count||0}</div><div class="l">Investors</div></div>
+              <div class="pc-stat"><div class="n">${fmtMoney(p.total_capital||0)}</div><div class="l">Capital</div></div>
+              <div class="pc-stat"><div class="n">${fmtMoney(p.total_sales||0)}</div><div class="l">Sales</div></div>
+              <div class="pc-stat"><div class="n">${p.target_capital>0?pct(p.total_capital,p.target_capital)+'%':'—'}</div><div class="l">Target</div></div>
+            </div>
+          </div>`;
+        }).join('');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function openProject(pid) {
+  try {
+    currentProject = await api('GET', `/projects/${pid}`);
+    document.getElementById('proj-detail-name').textContent = currentProject.name;
+    document.getElementById('proj-detail-loc').textContent = `📍 ${currentProject.location||'—'} · ${currentProject.code||''}`;
+    // Reset to summary tab
+    document.querySelectorAll('.ptab').forEach((b,i) => b.classList.toggle('active',i===0));
+    document.querySelectorAll('.ptab-content').forEach((c,i) => c.style.display = i===0?'block':'none');
+    loadProjectSummary(pid);
+    showSection('project');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function loadProjectSummary(pid) {
+  try {
+    const r = await api('GET', `/projects/${pid}/report`);
+    const s = r.summary;
+    document.getElementById('proj-stats').innerHTML = `
+      <div class="stat-card" style="--c:var(--blue)"><div class="lbl">Investors</div><div class="val">${s.totalInvestors}</div></div>
+      <div class="stat-card" style="--c:var(--gold)"><div class="lbl">Capital Raised</div><div class="val">${fmtMoney(s.totalCapital)}</div><div class="sub">Target: ${fmtMoney(s.targetCapital)}</div></div>
+      <div class="stat-card" style="--c:var(--green)"><div class="lbl">Total Sales</div><div class="val">${fmtMoney(s.totalIncome)}</div><div class="sub">${s.plotsSold} plots sold</div></div>
+      <div class="stat-card" style="--c:var(--navy)"><div class="lbl">Net Profit</div><div class="val">${fmtMoney(s.netProfit)}</div><div class="sub">Each group: ${fmtMoney(s.invPoolShare)}</div></div>`;
+    const p = r.project;
+    document.getElementById('proj-info-box').innerHTML = infoGrid([
+      ['AOP PAN', p.aop_pan||'—'], ['Location', p.location||'—'], ['Survey / Plot', p.survey_details||'—'],
+      ['Working Partners', p.wg_partners||'—'], ['Bank Account', p.bank_account||'—'],
+      ['Bank Name', p.bank_name||'—'], ['IFSC', p.ifsc||'—'],
+      ['Start Date', fmtDate(p.start_date)], ['Est. Completion', fmtDate(p.end_date)],
+      ['Status', p.status||'active']
+    ]);
+    const cp = s.capitalPct;
+    document.getElementById('proj-capital-box').innerHTML = `
+      <div style="text-align:center;margin-bottom:16px">
+        <div style="font-size:36px;font-weight:700;color:var(--navy);font-family:'JetBrains Mono',monospace">${cp}%</div>
+        <div style="font-size:12px;color:var(--muted)">of target capital raised</div>
+      </div>
+      <div class="progress-wrap" style="height:12px"><div class="progress-bar" style="width:${Math.min(100,cp)}%"></div></div>
+      <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:var(--muted)">
+        <span>${fmtMoney(s.totalCapital)} raised</span><span>${fmtMoney(s.targetCapital)} target</span>
+      </div>
+      <hr class="divider"/>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px">
+        <div class="stat-card" style="--c:var(--green)"><div class="lbl">Total Income</div><div class="val fz13">${fmtMoney(s.totalIncome)}</div></div>
+        <div class="stat-card" style="--c:var(--red)"><div class="lbl">Total Expense</div><div class="val fz13">${fmtMoney(s.totalExpense)}</div></div>
+        <div class="stat-card" style="--c:var(--gold)"><div class="lbl">Inv. Pool (50%)</div><div class="val fz13">${fmtMoney(s.invPoolShare)}</div></div>
+        <div class="stat-card" style="--c:var(--blue)"><div class="lbl">Working Group (50%)</div><div class="val fz13">${fmtMoney(s.wgShare)}</div></div>
+      </div>`;
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function infoGrid(rows) {
+  return `<div style="display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:12px">
+    ${rows.map(([l,v])=>`<span class="fw7 text-muted" style="color:var(--muted)">${l}</span><span>${v}</span>`).join('')}
+  </div>`;
+}
+
+// ════════════════════════════════════════
+// PROJECTS CRUD
+// ════════════════════════════════════════
+function projectFormHTML(p) {
+  return `<div class="modal-title">${p?'Edit Project':'New Project'}<button class="modal-close" onclick="closeModal()">×</button></div>
+  <div class="form-grid">
+    <div class="fg full"><label>Project Name *</label><input id="pf-name" value="${p?.name||''}"/></div>
+    <div class="fg"><label>Project Code</label><input id="pf-code" value="${p?.code||''}" placeholder="e.g. PROJ-01"/></div>
+    <div class="fg"><label>AOP PAN</label><input id="pf-pan" value="${p?.aop_pan||''}"/></div>
+    <div class="fg full"><label>Location</label><input id="pf-loc" value="${p?.location||''}" placeholder="Village/Taluk/District"/></div>
+    <div class="fg full"><label>Survey / Plot Details</label><input id="pf-survey" value="${p?.survey_details||''}"/></div>
+    <div class="fg"><label>Target Capital (₹)</label><input type="number" id="pf-target" value="${p?.target_capital||''}"/></div>
+    <div class="fg"><label>Working Group Partners</label><input id="pf-wg" value="${p?.wg_partners||''}"/></div>
+    <div class="fg"><label>Bank Account No.</label><input id="pf-bank" value="${p?.bank_account||''}"/></div>
+    <div class="fg"><label>Bank Name</label><input id="pf-bankname" value="${p?.bank_name||''}"/></div>
+    <div class="fg"><label>IFSC</label><input id="pf-ifsc" value="${p?.ifsc||''}"/></div>
+    <div class="fg"><label>Start Date</label><input type="date" id="pf-start" value="${p?.start_date?.slice(0,10)||''}"/></div>
+    <div class="fg"><label>Est. Completion</label><input type="date" id="pf-end" value="${p?.end_date?.slice(0,10)||''}"/></div>
+    <div class="fg full"><label>Description</label><textarea id="pf-desc">${p?.description||''}</textarea></div>
+    ${p?`<div class="fg"><label>Status</label><select id="pf-status"><option value="active" ${p.status==='active'?'selected':''}>Active</option><option value="completed" ${p.status==='completed'?'selected':''}>Completed</option><option value="abandoned" ${p.status==='abandoned'?'selected':''}>Abandoned</option></select></div>`:'' }
+  </div>
+  <div class="form-actions">
+    <button class="btn btn-primary" onclick="saveProject(${p?.id||null})">${p?'Update':'Create'} Project</button>
+    <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+  </div>`;
+}
+
+async function saveProject(id) {
+  const body = {
+    name: v('pf-name'), code: v('pf-code'), aop_pan: v('pf-pan'), location: v('pf-loc'),
+    survey_details: v('pf-survey'), target_capital: v('pf-target'), wg_partners: v('pf-wg'),
+    bank_account: v('pf-bank'), bank_name: v('pf-bankname'), ifsc: v('pf-ifsc'),
+    start_date: v('pf-start'), end_date: v('pf-end'), description: v('pf-desc'),
+    status: id ? v('pf-status') : 'active'
+  };
+  try {
+    if (id) { await api('PUT', `/projects/${id}`, body); toast('Project updated'); }
+    else { await api('POST', '/projects', body); toast('Project created'); }
+    closeModal(); loadOverview();
+    if (id && currentProject?.id === id) { currentProject = {...currentProject, ...body}; loadProjectSummary(id); }
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ════════════════════════════════════════
+// INVESTMENTS
+// ════════════════════════════════════════
+function investmentFormHTML(inv) {
+  return `<div class="modal-title">${inv?'Edit Investment':'Add Investor'}<button class="modal-close" onclick="closeModal()">×</button></div>
+  <div class="form-grid">
+    <div class="fg"><label>Full Name *</label><input id="if-name" value="${inv?.mobile||''}"/></div>
+    <div class="fg"><label>User Account (email)</label><input id="if-useremail" value="${inv?.user_email||''}" placeholder="Link to login account"/></div>
+    <div class="fg"><label>PAN *</label><input id="if-pan" value="${inv?.pan||''}" style="text-transform:uppercase"/></div>
+    <div class="fg"><label>Aadhaar</label><input id="if-aadhaar" value="${inv?.aadhaar||''}"/></div>
+    <div class="fg"><label>Mobile *</label><input id="if-mobile" value="${inv?.mobile||''}"/></div>
+    <div class="fg"><label>Email</label><input id="if-email" value="${inv?.email||''}"/></div>
+    <div class="fg"><label>Father/Spouse Name</label><input id="if-parent" value="${inv?.parent_name||''}"/></div>
+    <div class="fg"><label>KYC Status</label><select id="if-kyc"><option value="pending" ${inv?.kyc_status==='pending'?'selected':''}>Pending</option><option value="verified" ${inv?.kyc_status==='verified'?'selected':''}>Verified</option></select></div>
+    <div class="fg full"><label>Address</label><input id="if-address" value="${inv?.address||''}"/></div>
+    <div class="fg"><label>Bank Account No.</label><input id="if-bankacc" value="${inv?.bank_acc||''}"/></div>
+    <div class="fg"><label>Bank Name</label><input id="if-bankname" value="${inv?.bank_name||''}"/></div>
+    <div class="fg"><label>IFSC</label><input id="if-ifsc" value="${inv?.ifsc||''}"/></div>
+    <div class="fg"><label>Amount (₹) *</label><input type="number" id="if-amount" value="${inv?.amount||''}"/></div>
+    <div class="fg"><label>UTR / Reference *</label><input id="if-utr" value="${inv?.utr_reference||''}"/></div>
+    <div class="fg"><label>Date of Transfer *</label><input type="date" id="if-date" value="${inv?.investment_date?.slice(0,10)||''}"/></div>
+    <div class="fg"><label>Agreement Signed</label><select id="if-agr"><option value="false" ${!inv?.agreement_signed?'selected':''}>No</option><option value="true" ${inv?.agreement_signed?'selected':''}>Yes</option></select></div>
+    <div class="fg full"><label>Notes</label><textarea id="if-notes">${inv?.notes||''}</textarea></div>
+  </div>
+  <div class="form-actions">
+    <button class="btn btn-primary" onclick="saveInvestment(${inv?.id||null})">${inv?'Update':'Add'} Investment</button>
+    <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+  </div>`;
+}
+
+async function loadProjectInvestors(pid) {
+  try {
+    const invs = await api('GET', `/projects/${pid}/investments`);
+    const total = invs.reduce((s,i) => s + Number(i.amount), 0);
+    const body = document.getElementById('inv-body');
+    body.innerHTML = invs.length === 0 ? `<tr><td colspan="10"><div class="empty-state"><div class="ei">👥</div><p>No investors yet</p></div></td></tr>` :
+      invs.map(inv => {
+        const share = Number(inv.pool_share)||0;
+        const profEnt = (share * 0.5).toFixed(4);
+        return `<tr>
+          <td class="mono">${inv.investor_code}</td>
+          <td><strong>${inv.mobile||''}</strong><br><span class="fz11" style="color:var(--muted)">${inv.pan||''}</span></td>
+          <td class="mono">${inv.pan||'—'}</td>
+          <td class="mono fw7">${fmtMoney(inv.amount)}</td>
+          <td><span class="badge badge-blue">${share}%</span></td>
+          <td><span class="badge badge-gold">${profEnt}%</span></td>
+          <td class="fz11">${fmtDate(inv.investment_date)}</td>
+          <td><span class="badge ${inv.kyc_status==='verified'?'badge-green':'badge-gold'}">${inv.kyc_status==='verified'?'✓ Verified':'⏳ Pending'}</span></td>
+          <td><span class="badge ${inv.user_id?'badge-green':'badge-gray'}">${inv.user_id?'✓':'—'}</span></td>
+          <td style="white-space:nowrap">
+            <button class="btn btn-ghost btn-sm" onclick='openModal("investment-edit",${JSON.stringify(inv).replace(/'/g,"\\'")} )'>✏️</button>
+            <button class="btn btn-ghost btn-sm" onclick="genCertificate(${JSON.stringify(inv).replace(/</g,'&lt;')})">📜</button>
+          </td>
+        </tr>`;
+      }).join('');
+  } catch (e) { toast(e.message,'error'); }
+}
+
+async function saveInvestment(id) {
+  // Need to look up user by email if provided
+  let userId = null;
+  const userEmail = v('if-useremail');
+  if (userEmail) {
+    try { const users = await api('GET','/users'); const u = users.find(u=>u.email===userEmail); if(u) userId=u.id; }
+    catch(_) {}
+  }
+  const body = {
+    user_id: userId, amount: v('if-amount'), utr_reference: v('if-utr'),
+    investment_date: v('if-date'), kyc_status: v('if-kyc'), parent_name: v('if-parent'),
+    pan: v('if-pan')?.toUpperCase(), aadhaar: v('if-aadhaar'), mobile: v('if-mobile'),
+    email: v('if-email'), address: v('if-address'), bank_acc: v('if-bankacc'),
+    bank_name: v('if-bankname'), ifsc: v('if-ifsc'), notes: v('if-notes'),
+    agreement_signed: v('if-agr') === 'true'
+  };
+  try {
+    if (id) { await api('PUT', `/investments/${id}`, body); toast('Investment updated'); }
+    else { await api('POST', `/projects/${currentProject.id}/investments`, body); toast('Investor added'); }
+    closeModal(); loadProjectInvestors(currentProject.id); loadProjectSummary(currentProject.id);
+  } catch (e) { toast(e.message,'error'); }
+}
+
+// ════════════════════════════════════════
+// TRANSACTIONS
+// ════════════════════════════════════════
+function txnFormHTML(t) {
+  const cats = { income: ['Site Sale','Other Income'], expense: ['Land Purchase','Construction','Approval Fees','Legal & Registration','Marketing','Admin','Other Expense'], capital_in: ['Investor Capital'], profit_distribution: ['Investor Payout','Working Group Payout'] };
+  return `<div class="modal-title">${t?'Edit':'New'} Transaction<button class="modal-close" onclick="closeModal()">×</button></div>
+  <div class="form-grid">
+    <div class="fg"><label>Type *</label>
+      <select id="tf-type" onchange="updateCats()">
+        <option value="income">Income</option>
+        <option value="expense">Expense</option>
+        <option value="capital_in">Capital In</option>
+        <option value="profit_distribution">Profit Distribution</option>
+      </select>
+    </div>
+    <div class="fg"><label>Category</label><select id="tf-cat"><option>—</option></select></div>
+    <div class="fg"><label>Amount (₹) *</label><input type="number" id="tf-amount" value="${t?.amount||''}"/></div>
+    <div class="fg"><label>Date *</label><input type="date" id="tf-date" value="${t?.transaction_date?.slice(0,10)||''}"/></div>
+    <div class="fg full"><label>Description</label><input id="tf-desc" value="${t?.description||''}"/></div>
+    <div class="fg"><label>Reference / Cheque No.</label><input id="tf-ref" value="${t?.reference||''}"/></div>
+  </div>
+  <div class="form-actions">
+    <button class="btn btn-primary" onclick="saveTxn()">Save Entry</button>
+    <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+  </div>
+  <script>function updateCats(){const cats=${JSON.stringify(cats)};const t=document.getElementById('tf-type').value;const s=document.getElementById('tf-cat');s.innerHTML=(cats[t]||[]).map(c=>'<option>'+c+'</option>').join('');}updateCats();<\/script>`;
+}
+
+async function loadProjectAccounts(pid) {
+  try {
+    const txns = await api('GET', `/projects/${pid}/transactions`);
+    const income = txns.filter(t=>t.type==='income'||t.type==='capital_in').reduce((s,t)=>s+Number(t.amount),0);
+    const expense = txns.filter(t=>t.type==='expense').reduce((s,t)=>s+Number(t.amount),0);
+    const payout = txns.filter(t=>t.type==='profit_distribution').reduce((s,t)=>s+Number(t.amount),0);
+    document.getElementById('acct-stats').innerHTML = `
+      <div class="stat-card" style="--c:var(--green)"><div class="lbl">Total Income & Capital</div><div class="val">${fmtMoney(income)}</div></div>
+      <div class="stat-card" style="--c:var(--red)"><div class="lbl">Total Expense</div><div class="val">${fmtMoney(expense)}</div></div>
+      <div class="stat-card" style="--c:var(--gold)"><div class="lbl">Profit Distributed</div><div class="val">${fmtMoney(payout)}</div></div>
+      <div class="stat-card" style="--c:var(--navy)"><div class="lbl">Net Balance</div><div class="val">${fmtMoney(income-expense-payout)}</div></div>`;
+    const body = document.getElementById('txn-body');
+    body.innerHTML = txns.length === 0 ? `<tr><td colspan="7"><div class="empty-state"><div class="ei">📒</div><p>No transactions yet</p></div></td></tr>` :
+      txns.map(t => {
+        const isIn = t.type==='income'||t.type==='capital_in';
+        return `<tr>
+          <td class="fz11">${fmtDate(t.transaction_date)}</td>
+          <td><span class="badge ${isIn?'badge-green':t.type==='profit_distribution'?'badge-gold':'badge-red'}">${t.type.replace('_',' ')}</span></td>
+          <td class="fz11">${t.category||'—'}</td>
+          <td>${t.description||'—'}</td>
+          <td class="mono fz11">${t.reference||'—'}</td>
+          <td class="mono fw7 ${isIn?'text-green':'text-red'}">${isIn?'+':'-'}${fmtMoney(t.amount)}</td>
+          <td><button class="btn btn-ghost btn-sm" onclick="deleteTxn(${t.id})">🗑</button></td>
+        </tr>`;
+      }).join('');
+  } catch (e) { toast(e.message,'error'); }
+}
+
+async function saveTxn() {
+  const body = { type: v('tf-type'), category: v('tf-cat'), amount: v('tf-amount'), description: v('tf-desc'), transaction_date: v('tf-date'), reference: v('tf-ref') };
+  try { await api('POST', `/projects/${currentProject.id}/transactions`, body); toast('Entry added'); closeModal(); loadProjectAccounts(currentProject.id); loadProjectSummary(currentProject.id); }
+  catch (e) { toast(e.message,'error'); }
+}
+async function deleteTxn(id) {
+  if (!confirm('Delete this transaction?')) return;
+  try { await api('DELETE', `/transactions/${id}`); toast('Deleted'); loadProjectAccounts(currentProject.id); }
+  catch (e) { toast(e.message,'error'); }
+}
+
+// ════════════════════════════════════════
+// MILESTONES
+// ════════════════════════════════════════
+function milestoneFormHTML(ms) {
+  return `<div class="modal-title">Update Milestone<button class="modal-close" onclick="closeModal()">×</button></div>
+  <p class="fz13 fw7" style="margin-bottom:14px">${ms.title}</p>
+  <div class="form-grid">
+    <div class="fg"><label>Status</label>
+      <select id="mf-status">
+        <option value="pending" ${ms.status==='pending'?'selected':''}>Pending</option>
+        <option value="active" ${ms.status==='active'?'selected':''}>In Progress</option>
+        <option value="done" ${ms.status==='done'?'selected':''}>Completed</option>
+      </select>
+    </div>
+    <div class="fg"><label>Date</label><input type="date" id="mf-date" value="${ms.milestone_date?.slice(0,10)||''}"/></div>
+    <div class="fg full"><label>Notes</label><textarea id="mf-notes">${ms.notes||''}</textarea></div>
+  </div>
+  <div class="form-actions">
+    <button class="btn btn-primary" onclick="saveMilestone(${ms.id})">Update</button>
+    <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+  </div>`;
+}
+
+async function loadMilestones(pid) {
+  const ms = await api('GET', `/projects/${pid}/milestones`);
+  document.getElementById('ms-list').innerHTML = ms.map(m => `
+    <div class="tl-item" onclick='openModal("milestone-edit",${JSON.stringify(m)})' style="cursor:pointer">
+      <div class="tl-dot ${m.status==='done'?'done':m.status==='active'?'active':''}"></div>
+      <div class="tl-title">${m.title}</div>
+      <div class="tl-sub">${m.milestone_date?fmtDate(m.milestone_date):'Not set'} · <span class="badge ${m.status==='done'?'badge-green':m.status==='active'?'badge-gold':'badge-gray'}">${m.status}</span></div>
+      ${m.notes?`<div class="fz11" style="color:var(--muted);margin-top:3px">${m.notes}</div>`:''}
+    </div>`).join('');
+}
+
+async function saveMilestone(id) {
+  try {
+    await api('PUT', `/milestones/${id}`, { status: v('mf-status'), milestone_date: v('mf-date'), notes: v('mf-notes') });
+    toast('Milestone updated'); closeModal(); loadMilestones(currentProject.id);
+  } catch (e) { toast(e.message,'error'); }
+}
+
+// ════════════════════════════════════════
+// DOCUMENTS
+// ════════════════════════════════════════
+const DOC_TYPES = [
+  {v:'sale_deed',l:'🏠 Sale Deed (Land Purchase)'},
+  {v:'sale_agreement',l:'📋 Sale Agreement'},
+  {v:'approved_plan',l:'🗺 Approved Layout Plan'},
+  {v:'government_approval',l:'🏛 Government Approval'},
+  {v:'investor_agreement',l:'📝 Investor Agreement'},
+  {v:'investor_certificate',l:'📜 Investor Certificate'},
+  {v:'legal_document',l:'⚖️ Legal Document'},
+  {v:'financial_report',l:'💰 Financial Report'},
+  {v:'other',l:'📎 Other Document'}
+];
+
+function docUploadHTML() {
+  return `<div class="modal-title">Upload Document<button class="modal-close" onclick="closeModal()">×</button></div>
+  <div class="form-grid">
+    <div class="fg full"><label>Document Type *</label>
+      <select id="du-type">${DOC_TYPES.map(d=>`<option value="${d.v}">${d.l}</option>`).join('')}</select>
+    </div>
+    <div class="fg full"><label>Title *</label><input id="du-title" placeholder="e.g. Sale Deed - Survey No 123"/></div>
+    <div class="fg full"><label>Description</label><textarea id="du-desc" rows="2"></textarea></div>
+    <div class="fg full"><label>Visible to Investors?</label>
+      <select id="du-public"><option value="false">No (Admin only)</option><option value="true">Yes (Visible to investors)</option></select>
+    </div>
+    <div class="fg full"><label>File (PDF or Image, max 20MB) *</label>
+      <div class="input-file-area"><input type="file" id="du-file" accept=".pdf,image/*"/><div class="ifa-icon">📎</div><p>Click to select or drag file here</p></div>
+    </div>
+  </div>
+  <div class="form-actions">
+    <button class="btn btn-primary" onclick="uploadDoc()">Upload Document</button>
+    <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+  </div>`;
+}
+
+async function uploadDoc() {
+  const file = document.getElementById('du-file').files[0];
+  if (!file) return toast('Please select a file','error');
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('doc_type', v('du-type'));
+  fd.append('title', v('du-title'));
+  fd.append('description', v('du-desc'));
+  fd.append('is_public', v('du-public'));
+  try {
+    await api('POST', `/projects/${currentProject.id}/documents`, fd, true);
+    toast('Document uploaded'); closeModal(); loadDocuments(currentProject.id);
+  } catch (e) { toast(e.message,'error'); }
+}
+
+async function loadDocuments(pid) {
+  const docs = await api('GET', `/projects/${pid}/documents`);
+  const grouped = {};
+  docs.forEach(d => { const t = d.doc_type; if(!grouped[t]) grouped[t]=[]; grouped[t].push(d); });
+  const el = document.getElementById('docs-list');
+  if (!docs.length) { el.innerHTML = '<div class="empty-state"><div class="ei">📁</div><p>No documents uploaded yet</p></div>'; return; }
+  el.innerHTML = DOC_TYPES.filter(dt => grouped[dt.v]).map(dt => `
+    <div class="card">
+      <div class="card-hd"><span class="card-title">${dt.l}</span></div>
+      <div class="card-body" style="padding:0">
+        <table class="dt"><thead><tr><th>Title</th><th>File</th><th>Visibility</th><th>Uploaded</th><th>Actions</th></tr></thead><tbody>
+          ${grouped[dt.v].map(d=>`<tr>
+            <td><strong>${d.title}</strong>${d.description?`<br><span class="fz11" style="color:var(--muted)">${d.description}</span>`:''}</td>
+            <td class="fz11">${d.file_name||'—'}</td>
+            <td><span class="badge ${d.is_public?'badge-green':'badge-gray'}">${d.is_public?'Public':'Admin Only'}</span></td>
+            <td class="fz11">${fmtDate(d.created_at)}</td>
+            <td style="white-space:nowrap">
+              <a href="/api/documents/${d.id}/download" target="_blank" class="btn btn-outline btn-sm">⬇ View</a>
+              <button class="btn btn-ghost btn-sm" onclick="deleteDoc(${d.id})">🗑</button>
+            </td>
+          </tr>`).join('')}
+        </tbody></table>
+      </div>
+    </div>`).join('');
+}
+
+async function deleteDoc(id) {
+  if (!confirm('Delete this document?')) return;
+  try { await api('DELETE', `/documents/${id}`); toast('Deleted'); loadDocuments(currentProject.id); }
+  catch (e) { toast(e.message,'error'); }
+}
+
+// ════════════════════════════════════════
+// STAGE UPDATES
+// ════════════════════════════════════════
+function stageFormHTML() {
+  return `<div class="modal-title">Add Stage Update<button class="modal-close" onclick="closeModal()">×</button></div>
+  <div class="form-grid">
+    <div class="fg full"><label>Title *</label><input id="sf-title" placeholder="e.g. Foundation work completed on Block A"/></div>
+    <div class="fg"><label>Date</label><input type="date" id="sf-date"/></div>
+    <div class="fg full"><label>Description</label><textarea id="sf-desc" rows="3"></textarea></div>
+    <div class="fg full"><label>Photos (multiple, max 10)</label>
+      <div class="input-file-area"><input type="file" id="sf-photos" multiple accept="image/*"/><div class="ifa-icon">📷</div><p>Select multiple photos</p></div>
+    </div>
+  </div>
+  <div class="form-actions">
+    <button class="btn btn-primary" onclick="saveStage()">Post Update</button>
+    <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+  </div>`;
+}
+
+async function saveStage() {
+  const fd = new FormData();
+  fd.append('title', v('sf-title'));
+  fd.append('description', v('sf-desc'));
+  fd.append('stage_date', v('sf-date'));
+  const files = document.getElementById('sf-photos').files;
+  for (const f of files) fd.append('photos', f);
+  try {
+    await api('POST', `/projects/${currentProject.id}/stages`, fd, true);
+    toast('Update posted'); closeModal(); loadStages(currentProject.id);
+  } catch (e) { toast(e.message,'error'); }
+}
+
+async function loadStages(pid) {
+  const stages = await api('GET', `/projects/${pid}/stages`);
+  const el = document.getElementById('stages-list');
+  if (!stages.length) { el.innerHTML = '<div class="empty-state"><div class="ei">📷</div><p>No stage updates yet</p></div>'; return; }
+  el.innerHTML = stages.map(s => `
+    <div class="card">
+      <div class="card-hd">
+        <div>
+          <div class="card-title">${s.title}</div>
+          <div class="fz11" style="color:var(--muted)">${fmtDate(s.stage_date)} · ${s.created_by_name||'Admin'}</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="deleteStage(${s.id})">🗑</button>
+      </div>
+      <div class="card-body">
+        ${s.description?`<p class="fz12" style="margin-bottom:12px">${s.description}</p>`:''}
+        ${s.photos?.length?`<div class="photo-grid">${s.photos.map(p=>`<div class="photo-thumb" onclick="openModal('photo-view',${JSON.stringify(p)})"><img src="/api/stage-photos/${p.id}" loading="lazy" alt="${p.caption||''}"/>${p.caption?`<div class="photo-caption">${p.caption}</div>`:''}</div>`).join('')}</div>`:'<p class="fz11" style="color:var(--muted)">No photos</p>'}
+      </div>
+    </div>`).join('');
+}
+
+async function deleteStage(id) {
+  if(!confirm('Delete this update and all its photos?')) return;
+  try { await api('DELETE',`/stages/${id}`); toast('Deleted'); loadStages(currentProject.id); }
+  catch(e) { toast(e.message,'error'); }
+}
+
+function photoViewHTML(p) {
+  return `<div class="modal-title">${p.caption||'Photo'}<button class="modal-close" onclick="closeModal()">×</button></div>
+  <img src="/api/stage-photos/${p.id}" style="width:100%;border-radius:8px"/>`;
+}
+
+// ════════════════════════════════════════
+// SITE SALES
+// ════════════════════════════════════════
+function saleFormHTML() {
+  return `<div class="modal-title">Record Site Sale<button class="modal-close" onclick="closeModal()">×</button></div>
+  <div class="form-grid">
+    <div class="fg"><label>Plot Number *</label><input id="sl-plot" placeholder="e.g. A-12"/></div>
+    <div class="fg"><label>Plot Area</label><input id="sl-area" placeholder="e.g. 1200 sq.ft"/></div>
+    <div class="fg"><label>Customer Name *</label><input id="sl-cname"/></div>
+    <div class="fg"><label>Customer PAN</label><input id="sl-cpan"/></div>
+    <div class="fg"><label>Customer Mobile</label><input id="sl-cmob"/></div>
+    <div class="fg"><label>Sale Amount (₹) *</label><input type="number" id="sl-amount"/></div>
+    <div class="fg"><label>Sale Date</label><input type="date" id="sl-date"/></div>
+    <div class="fg"><label>Registration Date</label><input type="date" id="sl-regdate"/></div>
+    <div class="fg"><label>Document Number</label><input id="sl-docno" placeholder="Reg. doc no."/></div>
+    <div class="fg full"><label>Customer Address</label><input id="sl-caddr"/></div>
+    <div class="fg full"><label>Notes</label><textarea id="sl-notes" rows="2"></textarea></div>
+    <div class="fg full"><label>Sale Deed Documents (PDF/Images)</label>
+      <div class="input-file-area"><input type="file" id="sl-docs" multiple accept=".pdf,image/*"/><div class="ifa-icon">📄</div><p>Upload sale deed, receipt, etc.</p></div>
+    </div>
+  </div>
+  <div class="form-actions">
+    <button class="btn btn-green" onclick="saveSale()">Record Sale</button>
+    <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+  </div>`;
+}
+
+async function saveSale() {
+  const fd = new FormData();
+  fd.append('plot_number', v('sl-plot'));
+  fd.append('plot_area', v('sl-area'));
+  fd.append('customer_name', v('sl-cname'));
+  fd.append('customer_pan', v('sl-cpan'));
+  fd.append('customer_mobile', v('sl-cmob'));
+  fd.append('customer_address', v('sl-caddr'));
+  fd.append('sale_amount', v('sl-amount'));
+  fd.append('sale_date', v('sl-date'));
+  fd.append('registration_date', v('sl-regdate'));
+  fd.append('doc_number', v('sl-docno'));
+  fd.append('notes', v('sl-notes'));
+  const files = document.getElementById('sl-docs').files;
+  for (const f of files) fd.append('documents', f);
+  try {
+    await api('POST', `/projects/${currentProject.id}/sales`, fd, true);
+    toast('Sale recorded'); closeModal(); loadSales(currentProject.id); loadProjectSummary(currentProject.id);
+  } catch (e) { toast(e.message,'error'); }
+}
+
+async function loadSales(pid) {
+  const sales = await api('GET', `/projects/${pid}/sales`);
+  const totSales = sales.reduce((s,r) => s+Number(r.sale_amount), 0);
+  document.getElementById('sales-stats').innerHTML = `
+    <div class="stat-card" style="--c:var(--green)"><div class="lbl">Plots Sold</div><div class="val">${sales.length}</div></div>
+    <div class="stat-card" style="--c:var(--gold)"><div class="lbl">Total Sales Value</div><div class="val">${fmtMoney(totSales)}</div></div>`;
+  const body = document.getElementById('sales-body');
+  body.innerHTML = sales.length === 0 ? `<tr><td colspan="8"><div class="empty-state"><div class="ei">🏠</div><p>No sales recorded</p></div></td></tr>` :
+    sales.map(s => `<tr>
+      <td class="fw7">${s.plot_number||'—'}<br><span class="fz11" style="color:var(--muted)">${s.plot_area||''}</span></td>
+      <td><strong>${s.customer_name}</strong><br><span class="fz11">${s.customer_mobile||''}</span></td>
+      <td class="mono fz11">${s.customer_pan||'—'}</td>
+      <td class="mono fw7 text-green">${fmtMoney(s.sale_amount)}</td>
+      <td class="fz11">${fmtDate(s.sale_date)}</td>
+      <td class="mono fz11">${s.doc_number||'—'}</td>
+      <td>${s.documents?.length?s.documents.map(d=>`<a href="/api/sale-documents/${d.id}/download" target="_blank" class="badge badge-blue" style="margin-right:4px">📄 ${d.title||d.doc_type}</a>`).join(''):'—'}</td>
+      <td><span class="fz11 text-muted">${s.created_by_name||'Admin'}</span></td>
+    </tr>`).join('');
+}
+
+// ════════════════════════════════════════
+// REPORTS
+// ════════════════════════════════════════
+async function loadProjectReport(pid) {
+  try {
+    const r = await api('GET', `/projects/${pid}/report`);
+    document.getElementById('report-content').innerHTML = reportHTML(r, true);
+  } catch (e) { toast(e.message,'error'); }
+}
+
+function reportHTML(r, isAdmin) {
+  const s = r.summary; const p = r.project;
+  return `
+    <div class="report-section"><h3>📊 Project Summary</h3>
+      ${infoGrid([['Project',p.name],['Code',p.code||'—'],['Location',p.location||'—'],['Status',p.status],['AOP PAN',p.aop_pan||'—'],['Working Partners',p.wg_partners||'—'],['Start Date',fmtDate(p.start_date)],['Est. Completion',fmtDate(p.end_date)]])}
+    </div>
+    <div class="report-section"><h3>💰 Financial Summary</h3>
+      <div class="stat-grid">
+        <div class="stat-card" style="--c:var(--gold)"><div class="lbl">Capital Raised</div><div class="val fz13">${fmtMoney(s.totalCapital)}</div></div>
+        ${isAdmin?`<div class="stat-card" style="--c:var(--red)"><div class="lbl">Total Expense</div><div class="val fz13">${fmtMoney(s.totalExpense)}</div></div>`:''}
+        <div class="stat-card" style="--c:var(--green)"><div class="lbl">Total Sales Income</div><div class="val fz13">${fmtMoney(s.totalIncome)}</div></div>
+        <div class="stat-card" style="--c:var(--navy)"><div class="lbl">Net Profit</div><div class="val fz13">${fmtMoney(s.netProfit)}</div></div>
+        <div class="stat-card" style="--c:var(--blue)"><div class="lbl">Investor Pool (50%)</div><div class="val fz13">${fmtMoney(s.invPoolShare)}</div></div>
+        <div class="stat-card" style="--c:var(--blue)"><div class="lbl">Working Group (50%)</div><div class="val fz13">${fmtMoney(s.wgShare)}</div></div>
+      </div>
+    </div>
+    <div class="report-section"><h3>👥 Investor Register</h3>
+      <div class="tbl-wrap"><table class="dt"><thead><tr><th>Code</th><th>Name</th><th>PAN</th><th>Amount</th><th>Pool %</th><th>Profit Entitlement %</th><th>Projected Profit</th><th>Total Return</th></tr></thead><tbody>
+        ${r.investments.map(i=>{const sh=Number(i.pool_share)||0;const pe=(sh*0.5);const profPay=(s.invPoolShare*sh/100);return`<tr><td class="mono">${i.investor_code}</td><td>${i.user_name||i.email||'—'}</td><td class="mono">${i.pan||'—'}</td><td class="mono fw7">${fmtMoney(i.amount)}</td><td><span class="badge badge-blue">${sh}%</span></td><td><span class="badge badge-gold">${pe.toFixed(4)}%</span></td><td class="mono text-green">${fmtMoney(profPay)}</td><td class="mono fw7">${fmtMoney(Number(i.amount)+profPay)}</td></tr>`;}).join('')}
+      </tbody></table></div>
+    </div>
+    ${isAdmin?`<div class="report-section"><h3>📒 Transaction Ledger</h3>
+      <div class="tbl-wrap"><table class="dt"><thead><tr><th>Date</th><th>Type</th><th>Category</th><th>Description</th><th>Reference</th><th>Amount</th></tr></thead><tbody>
+        ${r.transactions.map(t=>`<tr><td class="fz11">${fmtDate(t.transaction_date)}</td><td><span class="badge ${t.type==='income'||t.type==='capital_in'?'badge-green':'badge-red'}">${t.type}</span></td><td class="fz11">${t.category||'—'}</td><td>${t.description||'—'}</td><td class="mono fz11">${t.reference||'—'}</td><td class="mono fw7 ${t.type==='income'||t.type==='capital_in'?'text-green':'text-red'}">${fmtMoney(t.amount)}</td></tr>`).join('')}
+      </tbody></table></div>
+    </div>`:''}
+    <div class="report-section"><h3>🏠 Site Sales</h3>
+      <div class="tbl-wrap"><table class="dt"><thead><tr><th>Plot</th><th>Customer</th><th>${isAdmin?'PAN':''}</th><th>Amount</th><th>Sale Date</th></tr></thead><tbody>
+        ${r.sales.map(s=>`<tr><td class="fw7">${s.plot_number||'—'}</td><td>${s.customer_name}</td><td>${isAdmin?s.customer_pan||'—':''}</td><td class="mono fw7 text-green">${fmtMoney(s.sale_amount)}</td><td class="fz11">${fmtDate(s.sale_date)}</td></tr>`).join('')}
+      </tbody></table></div>
+    </div>
+    <div class="report-section"><h3>📅 Milestones</h3>
+      <div class="tl">${r.milestones.map(m=>`<div class="tl-item"><div class="tl-dot ${m.status==='done'?'done':m.status==='active'?'active':''}"></div><div class="tl-title">${m.title}</div><div class="tl-sub">${m.milestone_date?fmtDate(m.milestone_date):'Not set'} · <span class="badge ${m.status==='done'?'badge-green':m.status==='active'?'badge-gold':'badge-gray'}">${m.status}</span></div>${m.notes?`<div class="fz11" style="color:var(--muted)">${m.notes}</div>`:''}</div>`).join('')}</div>
+    </div>`;
+}
+
+function printReport() { window.print(); }
+
+// ════════════════════════════════════════
+// CERTIFICATES
+// ════════════════════════════════════════
+function genCertificate(inv) {
+  // Build cert popup
+  const total = 0; // Will be reloaded
+  openModal('cert-view');
+  document.getElementById('modal-inner').innerHTML = certHTML(inv, currentProject, 'ack') + '<br/>' + certHTML(inv, currentProject, 'profit');
+}
+
+function buildCertificates(inv, proj, totalCap) {
+  const share = totalCap > 0 ? (Number(inv.amount) / totalCap * 100).toFixed(4) : '0';
+  const profEnt = (parseFloat(share) * 0.5).toFixed(4);
+  const ackCert = `
+    <div class="cert-wrap">
+      <div class="cert-no">${inv.investor_code}</div>
+      <div class="cert-star">★</div>
+      <div class="cert-project">${proj.name}</div>
+      <div class="cert-type">Investment Certificate</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:8px">This certifies that</div>
+      <div class="cert-name">${inv.mobile||''}</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px">${inv.parent_name?'S/o, D/o, W/o: '+inv.parent_name:''}</div>
+      <div class="cert-table">
+        <span class="cl">Investor ID</span><span class="cv">${inv.investor_code}</span>
+        <span class="cl">PAN</span><span class="cv">${inv.pan||'—'}</span>
+        <span class="cl">Amount Invested</span><span class="cv">${fmtMoney(inv.amount)}</span>
+        <span class="cl">Date of Transfer</span><span class="cv">${fmtDate(inv.investment_date)}</span>
+        <span class="cl">UTR / Reference</span><span class="cv">${inv.utr_reference||'—'}</span>
+        <span class="cl">Project</span><span class="cv">${proj.name}</span>
+        <span class="cl">KYC Status</span><span class="cv">${inv.kyc_status==='verified'?'✓ Verified':'⏳ Pending'}</span>
+      </div>
+      <div class="cert-seal">Official document of ${proj.name} · AOP ${proj.aop_pan||''} · Any tampering renders this void</div>
+    </div>`;
+  const profCert = `
+    <div class="cert-wrap">
+      <div class="cert-no">${inv.investor_code}-P</div>
+      <div class="cert-star">★</div>
+      <div class="cert-project">${proj.name}</div>
+      <div class="cert-type">Profit Entitlement</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:8px">This certifies that</div>
+      <div class="cert-name">${inv.mobile||''}</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px">is entitled to profit from this AOP project</div>
+      <div class="cert-table">
+        <span class="cl">Investor ID</span><span class="cv">${inv.investor_code}</span>
+        <span class="cl">Capital Contributed</span><span class="cv">${fmtMoney(inv.amount)}</span>
+        <span class="cl">Investor Pool Share</span><span class="cv">${share}%</span>
+        <span class="cl">Pool's Profit Share</span><span class="cv">50% of Net Profit</span>
+        <span class="cl">Your Profit Entitlement</span><span class="cv fw7 text-gold">${profEnt}% of Net Profit</span>
+        <span class="cl">Capital Return Priority</span><span class="cv">Full capital returned first</span>
+      </div>
+      <div class="cert-seal">Capital return before profit distribution · ${proj.name} · AOP ${proj.aop_pan||''}</div>
+    </div>`;
+  return { ackCert, profCert };
+}
+
+// ════════════════════════════════════════
+// USERS
+// ════════════════════════════════════════
+function userFormHTML(u) {
+  return `<div class="modal-title">${u?'Edit User':'Add User'}<button class="modal-close" onclick="closeModal()">×</button></div>
+  <div class="form-grid">
+    <div class="fg"><label>Full Name *</label><input id="uf-name" value="${u?.full_name||''}"/></div>
+    <div class="fg"><label>Email *</label><input type="email" id="uf-email" value="${u?.email||''}"/></div>
+    <div class="fg"><label>Role *</label>
+      <select id="uf-role">
+        <option value="investor" ${u?.role==='investor'?'selected':''}>Investor</option>
+        <option value="admin" ${u?.role==='admin'?'selected':''}>Admin</option>
+      </select>
+    </div>
+    <div class="fg"><label>Password ${u?'(leave blank to keep)':' *'}</label><input type="password" id="uf-pw" placeholder="${u?'(unchanged)':'Set password'}"/></div>
+    <div class="fg"><label>Mobile</label><input id="uf-mobile" value="${u?.mobile||''}"/></div>
+    <div class="fg"><label>PAN</label><input id="uf-pan" value="${u?.pan||''}"/></div>
+    ${u?`<div class="fg"><label>Active</label><select id="uf-active"><option value="true" ${u.is_active?'selected':''}>Active</option><option value="false" ${!u.is_active?'selected':''}>Disabled</option></select></div>`:''}
+  </div>
+  <div class="form-actions">
+    ${!u?'<div class="fg full"><label>Project Name (for welcome message)</label><input id="uf-project" placeholder="Optional — for welcome notification"/></div>':''}
+    <div class="fg full" style="${u?'display:none':''}"><label>Send Welcome Notification</label><select id="uf-notify"><option value="true">Yes — send login credentials via Email & WhatsApp</option><option value="false">No</option></select></div>
+    <button class="btn btn-primary" onclick="saveUser(${u?.id||null})">${u?'Update':'Create'} User</button>
+    <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+  </div>`;
+}
+
+async function loadUsers() {
+  const users = await api('GET','/users');
+  document.getElementById('users-body').innerHTML = users.map(u => `<tr>
+    <td><strong>${u.full_name}</strong></td>
+    <td class="mono fz11">${u.email}</td>
+    <td><span class="badge ${u.role==='admin'?'badge-gold':'badge-blue'}">${u.role}</span></td>
+    <td class="mono fz11">${u.pan||'—'}</td>
+    <td class="fz11">${u.mobile||'—'}</td>
+    <td><span class="badge ${u.is_active?'badge-green':'badge-red'}">${u.is_active?'Active':'Disabled'}</span></td>
+    <td class="fz11">${fmtDate(u.created_at)}</td>
+    <td><button class="btn btn-ghost btn-sm" onclick='openModal("user-form",${JSON.stringify(u)})'>✏️ Edit</button></td>
+  </tr>`).join('');
+}
+
+async function saveUser(id) {
+  const body = { full_name: v('uf-name'), email: v('uf-email'), role: v('uf-role'), mobile: v('uf-mobile'), pan: v('uf-pan') };
+  const pw = v('uf-pw');
+  if (pw) body.password = pw;
+  if (id) { body.is_active = v('uf-active') === 'true'; }
+  else {
+    body._notify = v('uf-notify') !== 'false';
+    body._projectName = v('uf-project') || 'your investment project';
+  }
+  try {
+    if (id) { await api('PUT',`/users/${id}`,body); toast('User updated'); }
+    else {
+      if (!pw) return toast('Password required','error');
+      await api('POST','/users',body);
+      toast('✅ User created' + (body._notify ? ' — Welcome notification being sent' : ''));
+    }
+    closeModal(); loadUsers();
+  } catch (e) { toast(e.message,'error'); }
+}
+
+// ════════════════════════════════════════
+// GLOBAL REPORTS
+// ════════════════════════════════════════
+async function loadGlobalReports() {
+  try {
+    const [projects, report] = await Promise.all([api('GET','/projects'), api('GET','/reports/overview')]);
+    const el = document.getElementById('global-report-content');
+    const totCap = (report.investments||[]).reduce((s,i)=>s+Number(i.total),0);
+    const totSales = (report.sales||[]).reduce((s,s2)=>s+Number(s2.total||0),0);
+    const totExpense = (report.transactions||[]).filter(t=>t.type==='expense').reduce((s,t)=>s+Number(t.total),0);
+    el.innerHTML = `
+      <div class="stat-grid">
+        <div class="stat-card" style="--c:var(--navy)"><div class="lbl">Total Projects</div><div class="val">${projects.length}</div></div>
+        <div class="stat-card" style="--c:var(--gold)"><div class="lbl">Total Capital</div><div class="val">${fmtMoney(totCap)}</div></div>
+        <div class="stat-card" style="--c:var(--green)"><div class="lbl">Total Sales</div><div class="val">${fmtMoney(totSales)}</div></div>
+        <div class="stat-card" style="--c:var(--red)"><div class="lbl">Total Expense</div><div class="val">${fmtMoney(totExpense)}</div></div>
+      </div>
+      <div class="report-section"><h3>📋 Project-wise Summary</h3>
+        <div class="tbl-wrap"><table class="dt"><thead><tr><th>Project</th><th>Code</th><th>Status</th><th>Investors</th><th>Capital</th><th>Sales</th></tr></thead><tbody>
+          ${projects.map(p=>{
+            const inv = (report.investments||[]).find(i=>i.project_id==p.id)||{};
+            const sal = (report.sales||[]).find(s=>s.project_id==p.id)||{};
+            return `<tr onclick="openProject(${p.id})" style="cursor:pointer"><td class="fw7">${p.name}</td><td class="mono fz11">${p.code||'—'}</td><td><span class="badge badge-${p.status==='active'?'green':p.status==='completed'?'blue':'red'}">${p.status}</span></td><td>${inv.count||0}</td><td class="mono">${fmtMoney(inv.total||0)}</td><td class="mono">${fmtMoney(sal.total||0)}</td></tr>`;
+          }).join('')}
+        </tbody></table></div>
+      </div>`;
+  } catch (e) { toast(e.message,'error'); }
+}
+
+// ════════════════════════════════════════
+// INVESTOR PORTAL
+// ════════════════════════════════════════
+async function loadInvestorHome() {
+  try {
+    const invs = await api('GET','/investments/mine');
+    const totCap = invs.reduce((s,i)=>s+Number(i.amount),0);
+    document.getElementById('inv-home-stats').innerHTML = `
+      <div class="stat-card" style="--c:var(--navy)"><div class="lbl">My Projects</div><div class="val">${invs.length}</div></div>
+      <div class="stat-card" style="--c:var(--gold)"><div class="lbl">Total Invested</div><div class="val">${fmtMoney(totCap)}</div></div>`;
+    document.getElementById('inv-project-cards').innerHTML = invs.length === 0 
+      ? '<div class="empty-state"><div class="ei">🏗</div><p>No investments linked to your account. Contact admin.</p></div>'
+      : invs.map(inv => `<div class="project-card" onclick="openInvProject(${inv.id},'${encodeURIComponent(JSON.stringify(inv))}')">
+          <span class="badge badge-${inv.project_status==='active'?'green':'blue'} pc-status">${inv.project_status}</span>
+          <div class="pc-code">${inv.project_code||'—'}</div>
+          <div class="pc-name">${inv.project_name}</div>
+          <div class="pc-loc">📍 ${inv.location||'—'}</div>
+          <div class="pc-stats">
+            <div class="pc-stat"><div class="n">${fmtMoney(inv.amount)}</div><div class="l">My Investment</div></div>
+            <div class="pc-stat"><div class="n">${Number(inv.pool_share)||0}%</div><div class="l">Pool Share</div></div>
+            <div class="pc-stat"><div class="n">${(Number(inv.pool_share)||0)*0.5}%</div><div class="l">Profit Entitlement</div></div>
+            <div class="pc-stat"><div class="n">${fmtDate(inv.investment_date)}</div><div class="l">Date</div></div>
+          </div>
+        </div>`).join('');
+  } catch (e) { toast(e.message,'error'); }
+}
+
+async function openInvProject(invId, invJSON) {
+  try {
+    currentInvestment = JSON.parse(decodeURIComponent(invJSON));
+    currentProject = await api('GET', `/projects/${currentInvestment.project_id}`);
+    document.getElementById('inv-proj-name').textContent = currentProject.name;
+    document.getElementById('inv-proj-loc').textContent = `📍 ${currentProject.location||'—'}`;
+    // Reset tabs
+    document.querySelectorAll('.ptab').forEach((b,i)=>b.classList.toggle('active',i===0));
+    document.querySelectorAll('.itab-content').forEach((c,i)=>c.style.display=i===0?'block':'none');
+    loadInvOverview();
+    showSection('inv-project');
+  } catch (e) { toast(e.message,'error'); }
+}
+
+async function loadInvOverview() {
+  try {
+    const r = await api('GET', `/projects/${currentProject.id}/report`);
+    const inv = r.investments.find(i=>i.user_id==currentUser.id) || currentInvestment;
+    const s = r.summary;
+    const share = Number(inv.pool_share)||0;
+    const profEnt = (share * 0.5).toFixed(4);
+    const myProjProfit = s.invPoolShare * share / 100;
+
+    document.getElementById('inv-proj-stats').innerHTML = `
+      <div class="stat-card" style="--c:var(--gold)"><div class="lbl">My Investment</div><div class="val">${fmtMoney(inv.amount)}</div></div>
+      <div class="stat-card" style="--c:var(--blue)"><div class="lbl">Pool Share</div><div class="val">${share}%</div></div>
+      <div class="stat-card" style="--c:var(--green)"><div class="lbl">Profit Entitlement</div><div class="val">${profEnt}%</div></div>
+      <div class="stat-card" style="--c:var(--navy)"><div class="lbl">Projected Profit</div><div class="val">${fmtMoney(myProjProfit)}</div><div class="sub">Based on current sales</div></div>`;
+
+    document.getElementById('inv-detail-box').innerHTML = infoGrid([
+      ['Investor Code', inv.investor_code||'—'],
+      ['PAN', inv.pan||'—'],
+      ['Amount Invested', fmtMoney(inv.amount)],
+      ['Date', fmtDate(inv.investment_date)],
+      ['UTR / Reference', inv.utr_reference||'—'],
+      ['Bank Account', inv.bank_acc||'—'],
+      ['KYC Status', inv.kyc_status==='verified'?'✓ Verified':'⏳ Pending'],
+      ['Agreement Signed', inv.agreement_signed?'✓ Yes':'Pending'],
+    ]);
+
+    document.getElementById('inv-profit-box').innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="stat-card" style="--c:var(--green)"><div class="lbl">Total Project Sales</div><div class="val fz13">${fmtMoney(s.totalIncome)}</div></div>
+        <div class="stat-card" style="--c:var(--gold)"><div class="lbl">Investor Pool Profit</div><div class="val fz13">${fmtMoney(s.invPoolShare)}</div></div>
+        <div class="stat-card" style="--c:var(--blue)"><div class="lbl">My Profit (${profEnt}%)</div><div class="val fz13">${fmtMoney(myProjProfit)}</div></div>
+        <div class="stat-card" style="--c:var(--navy)"><div class="lbl">My Total Return</div><div class="val fz13">${fmtMoney(Number(inv.amount)+myProjProfit)}</div></div>
+      </div>
+      <p class="fz11 mt12" style="color:var(--muted)">* Profit figures are projections based on current recorded sales. Final distribution after project completion.</p>`;
+
+    // Build certificates
+    const totalCap = r.investments.reduce((s,i)=>s+Number(i.amount),0);
+    const certs = buildCertificates(inv, currentProject, totalCap);
+    document.getElementById('cert-ack').innerHTML = certs.ackCert;
+    document.getElementById('cert-profit').innerHTML = certs.profCert;
+  } catch (e) { toast(e.message,'error'); }
+}
+
+async function loadInvMilestones(pid) {
+  const ms = await api('GET', `/projects/${pid}/milestones`);
+  document.getElementById('inv-ms-list').innerHTML = ms.map(m => `
+    <div class="tl-item">
+      <div class="tl-dot ${m.status==='done'?'done':m.status==='active'?'active':''}"></div>
+      <div class="tl-title">${m.title}</div>
+      <div class="tl-sub">${m.milestone_date?fmtDate(m.milestone_date):'Not set'} · <span class="badge ${m.status==='done'?'badge-green':m.status==='active'?'badge-gold':'badge-gray'}">${m.status}</span></div>
+      ${m.notes?`<div class="fz11" style="color:var(--muted);margin-top:3px">${m.notes}</div>`:''}
+    </div>`).join('');
+}
+
+async function loadInvStages(pid) {
+  const stages = await api('GET', `/projects/${pid}/stages`);
+  const el = document.getElementById('inv-stages-list');
+  if (!stages.length) { el.innerHTML = '<div class="empty-state"><div class="ei">📷</div><p>No updates posted yet</p></div>'; return; }
+  el.innerHTML = stages.map(s => `
+    <div class="card">
+      <div class="card-hd"><div><div class="card-title">${s.title}</div><div class="fz11" style="color:var(--muted)">${fmtDate(s.stage_date)}</div></div></div>
+      <div class="card-body">
+        ${s.description?`<p class="fz12" style="margin-bottom:12px">${s.description}</p>`:''}
+        ${s.photos?.length?`<div class="photo-grid">${s.photos.map(p=>`<div class="photo-thumb" onclick="openModal('photo-view',${JSON.stringify(p)})"><img src="/api/stage-photos/${p.id}" loading="lazy"/>${p.caption?`<div class="photo-caption">${p.caption}</div>`:''}</div>`).join('')}</div>`:''}
+      </div>
+    </div>`).join('');
+}
+
+async function loadInvDocuments(pid) {
+  const docs = await api('GET', `/projects/${pid}/documents`);
+  const el = document.getElementById('inv-docs-list');
+  if (!docs.length) { el.innerHTML = '<div class="empty-state"><div class="ei">📁</div><p>No documents shared yet</p></div>'; return; }
+  el.innerHTML = `<div class="card"><div class="card-body" style="padding:0"><table class="dt"><thead><tr><th>Type</th><th>Title</th><th>File</th><th>Date</th><th></th></tr></thead><tbody>
+    ${docs.map(d=>`<tr><td><span class="badge badge-blue">${d.doc_type.replace('_',' ')}</span></td><td>${d.title}</td><td class="fz11">${d.file_name||'—'}</td><td class="fz11">${fmtDate(d.created_at)}</td><td><a href="/api/documents/${d.id}/download" target="_blank" class="btn btn-outline btn-sm">⬇ View</a></td></tr>`).join('')}
+  </tbody></table></div></div>`;
+}
+
+async function loadInvReport(pid) {
+  try {
+    const r = await api('GET', `/projects/${pid}/report`);
+    const inv = r.investments.find(i=>i.user_id==currentUser.id);
+    const invReport = { ...r, investments: inv ? [inv] : [] };
+    document.getElementById('inv-report-content').innerHTML = reportHTML(invReport, false);
+  } catch (e) { toast(e.message,'error'); }
+}
+
+// ════════════════════════════════════════
+// SETTINGS
+// ════════════════════════════════════════
+async function changePw() {
+  const curr = v('s-curr-pw'), nw = v('s-new-pw'), conf = v('s-confirm-pw');
+  if (nw !== conf) return toast('Passwords do not match', 'error');
+  try { await api('PUT','/auth/password',{currentPassword:curr,newPassword:nw}); toast('Password changed'); ['s-curr-pw','s-new-pw','s-confirm-pw'].forEach(id=>document.getElementById(id).value=''); }
+  catch(e) { toast(e.message,'error'); }
+}
+
+// ════════════════════════════════════════
+// UTILS
+// ════════════════════════════════════════
+function v(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; }
+
+// ════════════════════════════════════════
+// LOGIN ROLE TAB
+// ════════════════════════════════════════
+function setRoleTab(role) {
+  const adminTab = document.getElementById('role-tab-admin');
+  const invTab = document.getElementById('role-tab-investor');
+  const adminHint = document.getElementById('login-hint-admin');
+  const invHint = document.getElementById('login-hint-investor');
+  if (role === 'admin') {
+    adminTab.style.background = 'var(--navy)'; adminTab.style.color = '#fff';
+    invTab.style.background = '#F1F5F9'; invTab.style.color = 'var(--muted)';
+    adminHint.style.display = 'block'; invHint.style.display = 'none';
+  } else {
+    invTab.style.background = 'var(--navy)'; invTab.style.color = '#fff';
+    adminTab.style.background = '#F1F5F9'; adminTab.style.color = 'var(--muted)';
+    invHint.style.display = 'block'; adminHint.style.display = 'none';
+  }
+}
+
+// ════════════════════════════════════════
+// ADMIN PROFILE
+// ════════════════════════════════════════
+async function loadSettingsPage() {
+  const isAdmin = currentUser?.role === 'admin';
+  document.getElementById('admin-profile-card').style.display = isAdmin ? 'block' : 'none';
+  document.getElementById('notif-config-card').style.display = isAdmin ? 'block' : 'none';
+  document.getElementById('investor-hint-card').style.display = isAdmin ? 'none' : 'block';
+
+  if (isAdmin) {
+    try {
+      const profile = await api('GET', '/admin/profile');
+      if (profile) {
+        document.getElementById('ap-name').value = profile.full_name || '';
+        document.getElementById('ap-email').value = profile.email || '';
+        document.getElementById('ap-mobile').value = profile.mobile || '';
+        document.getElementById('ap-pan').value = profile.pan || '';
+      }
+      // Load notification status
+      const nc = await api('GET', '/admin/notification-config');
+      if (nc) {
+        document.getElementById('email-status').innerHTML =
+          nc.emailConfigured
+            ? `<span class="badge badge-green">✅ Configured (${nc.emailUser})</span>`
+            : '<span class="badge badge-red">❌ Not configured</span>';
+        document.getElementById('wa-status').innerHTML =
+          nc.whatsappConfigured
+            ? `<span class="badge badge-green">✅ Configured (${nc.twilioSid})</span>`
+            : '<span class="badge badge-red">❌ Not configured</span>';
+        const badges = document.getElementById('notif-status-badges');
+        badges.innerHTML = `
+          <span class="badge ${nc.emailConfigured?'badge-green':'badge-gray'}">📧 Email ${nc.emailConfigured?'On':'Off'}</span>
+          <span class="badge ${nc.whatsappConfigured?'badge-green':'badge-gray'}">💬 WA ${nc.whatsappConfigured?'On':'Off'}</span>`;
+      }
+    } catch(e) { console.error(e); }
+  } else {
+    // Show investor profile info
+    try {
+      const me = await api('GET', '/auth/me');
+      if (me) {
+        document.getElementById('inv-profile-info').innerHTML = [
+          ['Name', me.full_name],
+          ['Email', me.email],
+          ['Role', 'Investor'],
+          ['Mobile', me.mobile || '—'],
+          ['PAN', me.pan || '—'],
+        ].map(([l,v]) => `<span style="font-weight:600;color:var(--muted)">${l}</span><span>${v}</span>`).join('');
+      }
+    } catch(e) {}
+  }
+}
+
+async function saveAdminProfile() {
+  const body = { full_name: v('ap-name'), email: v('ap-email'), mobile: v('ap-mobile'), pan: v('ap-pan') };
+  if (!body.full_name || !body.email) return toast('Name and email required', 'error');
+  try {
+    await api('PUT', '/admin/profile', body);
+    currentUser.name = body.full_name;
+    document.getElementById('user-name-footer').textContent = body.full_name;
+    toast('✅ Profile updated');
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function sendTestNotif(type) {
+  const body = {
+    type,
+    to_email: v('test-email'),
+    to_mobile: v('test-mobile')
+  };
+  if (type !== 'whatsapp' && !body.to_email) return toast('Enter test email', 'error');
+  if (type !== 'email' && !body.to_mobile) return toast('Enter test mobile', 'error');
+  try {
+    const r = await api('POST', '/admin/test-notification', body);
+    const email = r.results?.email;
+    const wa = r.results?.whatsapp;
+    let msg = '';
+    if (email !== undefined) msg += email ? '📧 Email sent! ' : '📧 Email failed (check config) ';
+    if (wa !== undefined) msg += wa ? '💬 WhatsApp sent!' : '💬 WhatsApp failed (check Twilio config)';
+    toast(msg || 'Done', email || wa ? 'success' : 'error');
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+// ════════════════════════════════════════
+// BOOT
+// ════════════════════════════════════════
+if (token) bootApp();
+</script>
+</body>
+</html>
