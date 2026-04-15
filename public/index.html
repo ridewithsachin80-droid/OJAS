@@ -838,7 +838,7 @@ async function saveProject(id) {
 function investmentFormHTML(inv) {
   return `<div class="modal-title">${inv?'Edit Investment':'Add Investor'}<button class="modal-close" onclick="closeModal()">×</button></div>
   <div class="form-grid">
-    <div class="fg"><label>Full Name *</label><input id="if-name" value="${inv?.mobile||''}"/></div>
+    <div class="fg"><label>Full Name *</label><input id="if-name" value="${inv?.full_name||''}"/></div>
     <div class="fg"><label>User Account (email)</label><input id="if-useremail" value="${inv?.user_email||''}" placeholder="Link to login account"/></div>
     <div class="fg"><label>PAN *</label><input id="if-pan" value="${inv?.pan||''}" style="text-transform:uppercase"/></div>
     <div class="fg"><label>Aadhaar</label><input id="if-aadhaar" value="${inv?.aadhaar||''}"/></div>
@@ -873,7 +873,7 @@ async function loadProjectInvestors(pid) {
         const profEnt = (share * 0.5).toFixed(4);
         return `<tr>
           <td class="mono">${inv.investor_code}</td>
-          <td><strong>${inv.mobile||''}</strong><br><span class="fz11" style="color:var(--muted)">${inv.pan||''}</span></td>
+          <td><strong>${inv.full_name||inv.user_full_name||'—'}</strong><br><span class="fz11" style="color:var(--muted)">${inv.mobile||''}</span></td>
           <td class="mono">${inv.pan||'—'}</td>
           <td class="mono fw7">${fmtMoney(inv.amount)}</td>
           <td><span class="badge badge-blue">${share}%</span></td>
@@ -899,7 +899,7 @@ async function saveInvestment(id) {
     catch(_) {}
   }
   const body = {
-    user_id: userId, amount: v('if-amount'), utr_reference: v('if-utr'),
+    user_id: userId, full_name: v('if-name'), amount: v('if-amount'), utr_reference: v('if-utr'),
     investment_date: v('if-date'), kyc_status: v('if-kyc'), parent_name: v('if-parent'),
     pan: v('if-pan')?.toUpperCase(), aadhaar: v('if-aadhaar'), mobile: v('if-mobile'),
     email: v('if-email'), address: v('if-address'), bank_acc: v('if-bankacc'),
@@ -1303,7 +1303,7 @@ function buildCertificates(inv, proj, totalCap) {
       <div class="cert-project">${proj.name}</div>
       <div class="cert-type">Investment Certificate</div>
       <div style="font-size:13px;color:var(--muted);margin-bottom:8px">This certifies that</div>
-      <div class="cert-name">${inv.mobile||''}</div>
+      <div class="cert-name">${inv.full_name||inv.user_full_name||'—'}</div>
       <div style="font-size:11px;color:var(--muted);margin-bottom:12px">${inv.parent_name?'S/o, D/o, W/o: '+inv.parent_name:''}</div>
       <div class="cert-table">
         <span class="cl">Investor ID</span><span class="cv">${inv.investor_code}</span>
@@ -1323,7 +1323,7 @@ function buildCertificates(inv, proj, totalCap) {
       <div class="cert-project">${proj.name}</div>
       <div class="cert-type">Profit Entitlement</div>
       <div style="font-size:13px;color:var(--muted);margin-bottom:8px">This certifies that</div>
-      <div class="cert-name">${inv.mobile||''}</div>
+      <div class="cert-name">${inv.full_name||inv.user_full_name||'—'}</div>
       <div style="font-size:11px;color:var(--muted);margin-bottom:12px">is entitled to profit from this AOP project</div>
       <div class="cert-table">
         <span class="cl">Investor ID</span><span class="cv">${inv.investor_code}</span>

@@ -168,6 +168,13 @@ CREATE TABLE IF NOT EXISTS site_sale_documents (
 );
 
 -- Create indexes
+-- Add full_name to investments if not exists (safe for existing DBs)
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='investments' AND column_name='full_name') THEN
+    ALTER TABLE investments ADD COLUMN full_name VARCHAR(255);
+  END IF;
+END $$;
+
 CREATE INDEX IF NOT EXISTS idx_investments_project ON investments(project_id);
 CREATE INDEX IF NOT EXISTS idx_investments_user ON investments(user_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_project ON transactions(project_id);

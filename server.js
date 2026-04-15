@@ -141,10 +141,20 @@ app.post('/api/users', auth('admin'), async (req, res) => {
   try {
     const hash = await bcrypt.hash(password, 10);
     const r = await pool.query(
-      'INSERT INTO users (email,password_hash,role,full_name,mobile,pan,aadhaar,address) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id,email,role,full_name',
+      'INSERT INTO users (email,password_hash,role,full_name,mobile,pan,aadhaar,address) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id,email,role,full_name,mobile',
       [email.toLowerCase(), hash, role, full_name, mobile||null, pan||null, aadhaar||null, address||null]
     );
-    res.json(r.rows[0]);
+    const newUser = r.rows[0];
+    // Send welcome notification for investors
+    if (role === 'investor' && req.body._notify !== false) {
+      setImmediate(() => notify('welcomeInvestor', {
+        name: full_name,
+        email: email.toLowerCase(),
+        password: password,
+        projectName: req.body._projectName || 'your investment project'
+      }, [{ email: email.toLowerCase(), mobile: mobile||null, name: full_name }]));
+    }
+    res.json(newUser);
   } catch (e) {
     if (e.code === '23505') return res.status(400).json({ error: 'Email already exists' });
     res.status(500).json({ error: e.message });
@@ -333,10 +343,11 @@ app.post('/api/projects/:id/investments', auth('admin'), async (req, res) => {
     const codeR = await pool.query('SELECT code FROM projects WHERE id=$1', [pid]);
     const pcode = (codeR.rows[0]?.code || pid).toUpperCase();
     const investor_code = `${pcode}-${year}-${seq}`;
+    const { full_name } = req.body;
     const r = await pool.query(
-      `INSERT INTO investments (investor_code,user_id,project_id,amount,utr_reference,investment_date,kyc_status,parent_name,pan,aadhaar,mobile,email,address,bank_acc,bank_name,ifsc,notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
-      [investor_code, user_id||null, pid, amount, utr_reference||null, investment_date||null, kyc_status||'pending', parent_name||null, pan||null, aadhaar||null, mobile||null, email||null, address||null, bank_acc||null, bank_name||null, ifsc||null, notes||null]
+      `INSERT INTO investments (investor_code,user_id,project_id,amount,utr_reference,investment_date,kyc_status,full_name,parent_name,pan,aadhaar,mobile,email,address,bank_acc,bank_name,ifsc,notes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
+      [investor_code, user_id||null, pid, amount, utr_reference||null, investment_date||null, kyc_status||'pending', full_name||null, parent_name||null, pan||null, aadhaar||null, mobile||null, email||null, address||null, bank_acc||null, bank_name||null, ifsc||null, notes||null]
     );
     // Record as capital_in transaction
     await pool.query(
@@ -368,11 +379,11 @@ app.post('/api/projects/:id/investments', auth('admin'), async (req, res) => {
 });
 
 app.put('/api/investments/:id', auth('admin'), async (req, res) => {
-  const { amount, utr_reference, investment_date, kyc_status, parent_name, pan, aadhaar, mobile, email, address, bank_acc, bank_name, ifsc, notes, agreement_signed } = req.body;
+  const { amount, utr_reference, investment_date, kyc_status, full_name, parent_name, pan, aadhaar, mobile, email, address, bank_acc, bank_name, ifsc, notes, agreement_signed } = req.body;
   try {
     await pool.query(
-      `UPDATE investments SET amount=$1,utr_reference=$2,investment_date=$3,kyc_status=$4,parent_name=$5,pan=$6,aadhaar=$7,mobile=$8,email=$9,address=$10,bank_acc=$11,bank_name=$12,ifsc=$13,notes=$14,agreement_signed=$15,updated_at=NOW() WHERE id=$16`,
-      [amount, utr_reference||null, investment_date||null, kyc_status||'pending', parent_name||null, pan||null, aadhaar||null, mobile||null, email||null, address||null, bank_acc||null, bank_name||null, ifsc||null, notes||null, agreement_signed||false, req.params.id]
+      `UPDATE investments SET amount=$1,utr_reference=$2,investment_date=$3,kyc_status=$4,full_name=$5,parent_name=$6,pan=$7,aadhaar=$8,mobile=$9,email=$10,address=$11,bank_acc=$12,bank_name=$13,ifsc=$14,notes=$15,agreement_signed=$16,updated_at=NOW() WHERE id=$17`,
+      [amount, utr_reference||null, investment_date||null, kyc_status||'pending', full_name||null, parent_name||null, pan||null, aadhaar||null, mobile||null, email||null, address||null, bank_acc||null, bank_name||null, ifsc||null, notes||null, agreement_signed||false, req.params.id]
     );
     res.json({ message: 'Investment updated' });
   } catch (e) { res.status(500).json({ error: e.message }); }
