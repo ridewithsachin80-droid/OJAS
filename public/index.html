@@ -873,28 +873,40 @@ async function loadProjectInvestors(pid) {
     const invs = await api('GET', `/projects/${pid}/investments`);
     const total = invs.reduce((s,i) => s + Number(i.amount), 0);
     const body = document.getElementById('inv-body');
-    body.innerHTML = invs.length === 0 ? `<tr><td colspan="11"><div class="empty-state"><div class="ei">👥</div><p>No investors yet</p></div></td></tr>` :
-      invs.map(inv => {
+    window._investorsMap = {};
+    invs.forEach(i => window._investorsMap[i.id] = i);
+    if (invs.length === 0) {
+      body.innerHTML = '<tr><td colspan="11"><div class="empty-state"><div class="ei">👥</div><p>No investors yet</p></div></td></tr>';
+    } else {
+      body.innerHTML = invs.map(inv => {
         const share = Number(inv.pool_share)||0;
         const profEnt = (share * 0.5).toFixed(4);
         const hasAmt = Number(inv.amount) > 0;
-        return `<tr>
-          <td class="mono">${inv.investor_code}</td>
-          <td><strong>${inv.full_name||inv.user_full_name||'—'}</strong><br><span class="fz11" style="color:var(--muted)">${inv.mobile||''}</span></td>
-          <td class="mono">${inv.pan||'—'}</td>
-          <td class="mono fw7">${hasAmt ? fmtMoney(inv.amount) : '<span style=\"color:var(--muted);font-size:11px\">No payment yet</span>'}</td>
-          <td><span class="badge badge-blue">${share}%</span></td>
-          <td><span class="badge badge-gold">${profEnt}%</span></td>
-          <td class="fz11">${fmtDate(inv.investment_date)}</td>
-          <td><span class="badge ${inv.kyc_status==='verified'?'badge-green':'badge-gold'}">${inv.kyc_status==='verified'?'✓ Verified':'⏳ Pending'}</span></td>
-          <td><span class="badge ${inv.user_id?'badge-green':'badge-gray'}">${inv.user_id?'✓':'—'}</span></td>
-          <td><button class="btn btn-ghost btn-sm" title="View Payments" onclick="openPaymentsModal(${inv.id},'${(inv.full_name||inv.user_full_name||'Investor').replace(/'/g,\"\\\\'\")}')">💰 Payments</button></td>
-          <td style="white-space:nowrap">
-            <button class="btn btn-ghost btn-sm" onclick='openModal("investment-edit",${JSON.stringify(inv).replace(/'/g,"\\'")} )'>✏️</button>
-            <button class="btn btn-ghost btn-sm" onclick="genCertificate(${JSON.stringify(inv).replace(/</g,'&lt;')})">📜</button>
-          </td>
-        </tr>`;
-      }).join('');  } catch (e) { toast(e.message,'error'); }
+        const amtCell = hasAmt ? fmtMoney(inv.amount) : '<span style="color:var(--muted);font-size:11px">No payment yet</span>';
+        const kycBadge = inv.kyc_status==='verified' ? 'badge-green' : 'badge-gold';
+        const kycLabel = inv.kyc_status==='verified' ? '✓ Verified' : '⏳ Pending';
+        const loginBadge = inv.user_id ? 'badge-green' : 'badge-gray';
+        const loginLabel = inv.user_id ? '✓' : '—';
+        return [
+          '<tr>',
+          '<td class="mono">' + inv.investor_code + '</td>',
+          '<td><strong>' + (inv.full_name||inv.user_full_name||'—') + '</strong><br>',
+          '<span class="fz11" style="color:var(--muted)">' + (inv.mobile||'') + '</span></td>',
+          '<td class="mono">' + (inv.pan||'—') + '</td>',
+          '<td class="mono fw7">' + amtCell + '</td>',
+          '<td><span class="badge badge-blue">' + share + '%</span></td>',
+          '<td><span class="badge badge-gold">' + profEnt + '%</span></td>',
+          '<td class="fz11">' + fmtDate(inv.investment_date) + '</td>',
+          '<td><span class="badge ' + kycBadge + '">' + kycLabel + '</span></td>',
+          '<td><span class="badge ' + loginBadge + '">' + loginLabel + '</span></td>',
+          '<td><button class="btn btn-ghost btn-sm" onclick="openPaymentsModal(' + inv.id + ')">💰 Payments</button></td>',
+          '<td style="white-space:nowrap">',
+          '<button class="btn btn-ghost btn-sm" onclick="editInvestor(' + inv.id + ')">✏️</button>',
+          '<button class="btn btn-ghost btn-sm" onclick="viewCert(' + inv.id + ')">📜</button>',
+          '</td></tr>'
+        ].join('');
+      }).join('');
+    }  } catch (e) { toast(e.message,'error'); }
 }
 
 async function saveInvestment(id) {
@@ -926,7 +938,16 @@ async function saveInvestment(id) {
 }
 
 // ── Payments Modal ──
-async function openPaymentsModal(invId, invName) {
+function editInvestor(id) {
+  const inv = window._investorsMap[id];
+  if (inv) openModal('investment-edit', inv);
+}
+function viewCert(id) {
+  const inv = window._investorsMap[id];
+  if (inv) genCertificate(inv);
+}
+async function openPaymentsModal(invId) {
+  const invName = (window._investorsMap[invId]?.full_name || window._investorsMap[invId]?.user_full_name || 'Investor');
   const inner = document.getElementById('modal-inner');
   document.getElementById('modal-bg').classList.add('open');
   inner.innerHTML = paymentsModalHTML(invId, invName, []);
@@ -938,37 +959,41 @@ async function openPaymentsModal(invId, invName) {
 
 function paymentsModalHTML(invId, invName, payments) {
   const total = payments.reduce((s,p) => s + Number(p.amount), 0);
-  const rows = payments.length === 0
-    ? `<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">No payments recorded yet</td></tr>`
-    : payments.map(p => `<tr>
-        <td class="fz11">${fmtDate(p.payment_date)}</td>
-        <td class="mono fw7">${fmtMoney(p.amount)}</td>
-        <td class="mono fz11">${p.utr_reference||'—'}</td>
-        <td class="fz11">${p.notes||'—'}</td>
-        <td><button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="deletePayment(${invId},'${invName.replace(/'/g,"\'")}',${p.id})" title="Delete payment">🗑️</button></td>
-      </tr>`).join('');
-  return `<div class="modal-title">💰 Payments — ${invName}<button class="modal-close" onclick="closeModal()">×</button></div>
-  ${payments.length > 0 ? `<div style="display:flex;gap:10px;margin-bottom:14px">
-    <div class="stat-card" style="--c:var(--green);flex:1;min-width:0"><div class="lbl">Total Received</div><div class="val" style="font-size:20px">${fmtMoney(total)}</div></div>
-    <div class="stat-card" style="--c:var(--navy);flex:1;min-width:0"><div class="lbl">No. of Payments</div><div class="val" style="font-size:20px">${payments.length}</div></div>
-  </div>` : ''}
-  <table class="data-table" style="margin-bottom:18px">
-    <thead><tr><th>Date</th><th>Amount</th><th>UTR / Ref</th><th>Notes</th><th></th></tr></thead>
-    <tbody>${rows}</tbody>
-  </table>
-  <div style="background:#f0f7ff;border:1px solid #c8def5;border-radius:10px;padding:16px">
-    <div style="font-weight:700;color:var(--navy);margin-bottom:12px;font-size:13px">+ Add New Payment</div>
-    <div class="form-grid">
-      <div class="fg"><label>Amount (₹) *</label><input type="number" id="pmt-amount" placeholder="e.g. 200000"/></div>
-      <div class="fg"><label>UTR / Reference</label><input id="pmt-utr" placeholder="Bank transfer ref"/></div>
-      <div class="fg"><label>Date of Transfer *</label><input type="date" id="pmt-date"/></div>
-      <div class="fg"><label>Notes</label><input id="pmt-notes" placeholder="Optional"/></div>
-    </div>
-    <button class="btn btn-primary" style="margin-top:6px" onclick="addPayment(${invId},'${invName.replace(/'/g,"\'")}')">Record Payment</button>
-  </div>`;
+  let rows = '';
+  if (payments.length === 0) {
+    rows = '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">No payments recorded yet</td></tr>';
+  } else {
+    rows = payments.map(p => [
+      '<tr>',
+      '<td class="fz11">' + fmtDate(p.payment_date) + '</td>',
+      '<td class="mono fw7">' + fmtMoney(p.amount) + '</td>',
+      '<td class="mono fz11">' + (p.utr_reference||'—') + '</td>',
+      '<td class="fz11">' + (p.notes||'—') + '</td>',
+      '<td><button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="deletePayment(' + invId + ',' + p.id + ')" title="Delete payment">🗑️</button></td>',
+      '</tr>'
+    ].join('')).join('');
+  }
+  const statsHTML = payments.length > 0
+    ? '<div style="display:flex;gap:10px;margin-bottom:14px">' +
+      '<div class="stat-card" style="--c:var(--green);flex:1;min-width:0"><div class="lbl">Total Received</div><div class="val" style="font-size:20px">' + fmtMoney(total) + '</div></div>' +
+      '<div class="stat-card" style="--c:var(--navy);flex:1;min-width:0"><div class="lbl">No. of Payments</div><div class="val" style="font-size:20px">' + payments.length + '</div></div>' +
+      '</div>' : '';
+  return '<div class="modal-title">💰 Payments — ' + invName + '<button class="modal-close" onclick="closeModal()">×</button></div>' +
+    statsHTML +
+    '<table class="data-table" style="margin-bottom:18px"><thead><tr><th>Date</th><th>Amount</th><th>UTR / Ref</th><th>Notes</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>' +
+    '<div style="background:#f0f7ff;border:1px solid #c8def5;border-radius:10px;padding:16px">' +
+    '<div style="font-weight:700;color:var(--navy);margin-bottom:12px;font-size:13px">+ Add New Payment</div>' +
+    '<div class="form-grid">' +
+    '<div class="fg"><label>Amount (₹) *</label><input type="number" id="pmt-amount" placeholder="e.g. 200000"/></div>' +
+    '<div class="fg"><label>UTR / Reference</label><input id="pmt-utr" placeholder="Bank transfer ref"/></div>' +
+    '<div class="fg"><label>Date of Transfer *</label><input type="date" id="pmt-date"/></div>' +
+    '<div class="fg"><label>Notes</label><input id="pmt-notes" placeholder="Optional"/></div>' +
+    '</div>' +
+    '<button class="btn btn-primary" style="margin-top:6px" onclick="addPayment(' + invId + ')">Record Payment</button>' +
+    '</div>';
 }
-
-async function addPayment(invId, invName) {
+async function addPayment(invId) {
+  const invName = (window._investorsMap[invId]?.full_name || window._investorsMap[invId]?.user_full_name || 'Investor');
   const amount = v('pmt-amount');
   const payment_date = v('pmt-date');
   if (!amount || !payment_date) { toast('Amount and date are required','error'); return; }
@@ -980,18 +1005,19 @@ async function addPayment(invId, invName) {
     loadProjectInvestors(currentProject.id);
     loadProjectSummary(currentProject.id);
     // Refresh the modal in place
-    openPaymentsModal(invId, invName);
+    openPaymentsModal(invId);
   } catch(e) { toast(e.message,'error'); }
 }
 
-async function deletePayment(invId, invName, pmtId) {
+async function deletePayment(invId, pmtId) {
+  const invName = (window._investorsMap[invId]?.full_name || window._investorsMap[invId]?.user_full_name || 'Investor');
   if (!confirm('Delete this payment? This will also reduce the investor total.')) return;
   try {
     await api('DELETE', `/investments/${invId}/payments/${pmtId}`);
     toast('Payment deleted');
     loadProjectInvestors(currentProject.id);
     loadProjectSummary(currentProject.id);
-    openPaymentsModal(invId, invName);
+    openPaymentsModal(invId);
   } catch(e) { toast(e.message,'error'); }
 }
 
