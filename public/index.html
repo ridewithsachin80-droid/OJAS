@@ -326,7 +326,7 @@ table.dt tr:hover td{background:#FAFBFF}
             <div class="card-title">Investor Register</div>
             <button class="btn btn-primary btn-sm" onclick="openModal('investment-form')">+ Add Investor</button>
           </div>
-          <div class="card"><div class="tbl-wrap"><table class="dt" id="inv-table"><thead><tr><th>ID</th><th>Name</th><th>PAN</th><th>Amount (₹)</th><th>Pool Share</th><th>Profit Entitlement</th><th>Date</th><th>KYC</th><th>Login</th><th>Actions</th></tr></thead><tbody id="inv-body"></tbody></table></div></div>
+          <div class="card"><div class="tbl-wrap"><table class="dt" id="inv-table"><thead><tr><th>ID</th><th>Name</th><th>PAN</th><th>Total Invested (₹)</th><th>Pool Share</th><th>Profit Entitlement</th><th>Date</th><th>KYC</th><th>Login</th><th>Payments</th><th>Actions</th></tr></thead><tbody id="inv-body"></tbody></table></div></div>
         </div>
 
         <div id="pt-accounts" class="ptab-content" style="display:none">
@@ -836,11 +836,12 @@ async function saveProject(id) {
 // INVESTMENTS
 // ════════════════════════════════════════
 function investmentFormHTML(inv) {
-  return `<div class="modal-title">${inv?'Edit Investment':'Add Investor'}<button class="modal-close" onclick="closeModal()">×</button></div>
+  const isEdit = !!inv;
+  return `<div class="modal-title">${isEdit?'Edit Investor':'Add Investor'}<button class="modal-close" onclick="closeModal()">×</button></div>
   <div class="form-grid">
     <div class="fg"><label>Full Name *</label><input id="if-name" value="${inv?.full_name||''}"/></div>
     <div class="fg"><label>User Account (email)</label><input id="if-useremail" value="${inv?.user_email||''}" placeholder="Link to login account"/></div>
-    <div class="fg"><label>PAN *</label><input id="if-pan" value="${inv?.pan||''}" style="text-transform:uppercase"/></div>
+    <div class="fg"><label>PAN</label><input id="if-pan" value="${inv?.pan||''}" style="text-transform:uppercase"/></div>
     <div class="fg"><label>Aadhaar</label><input id="if-aadhaar" value="${inv?.aadhaar||''}"/></div>
     <div class="fg"><label>Mobile *</label><input id="if-mobile" value="${inv?.mobile||''}"/></div>
     <div class="fg"><label>Email</label><input id="if-email" value="${inv?.email||''}"/></div>
@@ -850,14 +851,19 @@ function investmentFormHTML(inv) {
     <div class="fg"><label>Bank Account No.</label><input id="if-bankacc" value="${inv?.bank_acc||''}"/></div>
     <div class="fg"><label>Bank Name</label><input id="if-bankname" value="${inv?.bank_name||''}"/></div>
     <div class="fg"><label>IFSC</label><input id="if-ifsc" value="${inv?.ifsc||''}"/></div>
-    <div class="fg"><label>Amount (₹) *</label><input type="number" id="if-amount" value="${inv?.amount||''}"/></div>
-    <div class="fg"><label>UTR / Reference *</label><input id="if-utr" value="${inv?.utr_reference||''}"/></div>
-    <div class="fg"><label>Date of Transfer *</label><input type="date" id="if-date" value="${inv?.investment_date?.slice(0,10)||''}"/></div>
     <div class="fg"><label>Agreement Signed</label><select id="if-agr"><option value="false" ${!inv?.agreement_signed?'selected':''}>No</option><option value="true" ${inv?.agreement_signed?'selected':''}>Yes</option></select></div>
     <div class="fg full"><label>Notes</label><textarea id="if-notes">${inv?.notes||''}</textarea></div>
   </div>
+  ${!isEdit ? `<div style="margin:14px 0 4px;padding:14px 16px;background:#f0f7ff;border-radius:10px;border:1px solid #c8def5">
+    <div style="font-weight:600;color:var(--navy);margin-bottom:10px;font-size:13px">💰 First Payment <span style="font-weight:400;color:var(--muted)">(optional — can be added later)</span></div>
+    <div class="form-grid">
+      <div class="fg"><label>Amount (₹)</label><input type="number" id="if-amount" placeholder="e.g. 500000"/></div>
+      <div class="fg"><label>UTR / Reference</label><input id="if-utr" placeholder="Bank transfer ref"/></div>
+      <div class="fg"><label>Date of Transfer</label><input type="date" id="if-date"/></div>
+    </div>
+  </div>` : ''}
   <div class="form-actions">
-    <button class="btn btn-primary" onclick="saveInvestment(${inv?.id||null})">${inv?'Update':'Add'} Investment</button>
+    <button class="btn btn-primary" onclick="saveInvestment(${inv?.id||null})">${isEdit?'Update':'Add'} Investor</button>
     <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
   </div>`;
 }
@@ -867,31 +873,31 @@ async function loadProjectInvestors(pid) {
     const invs = await api('GET', `/projects/${pid}/investments`);
     const total = invs.reduce((s,i) => s + Number(i.amount), 0);
     const body = document.getElementById('inv-body');
-    body.innerHTML = invs.length === 0 ? `<tr><td colspan="10"><div class="empty-state"><div class="ei">👥</div><p>No investors yet</p></div></td></tr>` :
+    body.innerHTML = invs.length === 0 ? `<tr><td colspan="11"><div class="empty-state"><div class="ei">👥</div><p>No investors yet</p></div></td></tr>` :
       invs.map(inv => {
         const share = Number(inv.pool_share)||0;
         const profEnt = (share * 0.5).toFixed(4);
+        const hasAmt = Number(inv.amount) > 0;
         return `<tr>
           <td class="mono">${inv.investor_code}</td>
           <td><strong>${inv.full_name||inv.user_full_name||'—'}</strong><br><span class="fz11" style="color:var(--muted)">${inv.mobile||''}</span></td>
           <td class="mono">${inv.pan||'—'}</td>
-          <td class="mono fw7">${fmtMoney(inv.amount)}</td>
+          <td class="mono fw7">${hasAmt ? fmtMoney(inv.amount) : '<span style=\"color:var(--muted);font-size:11px\">No payment yet</span>'}</td>
           <td><span class="badge badge-blue">${share}%</span></td>
           <td><span class="badge badge-gold">${profEnt}%</span></td>
           <td class="fz11">${fmtDate(inv.investment_date)}</td>
           <td><span class="badge ${inv.kyc_status==='verified'?'badge-green':'badge-gold'}">${inv.kyc_status==='verified'?'✓ Verified':'⏳ Pending'}</span></td>
           <td><span class="badge ${inv.user_id?'badge-green':'badge-gray'}">${inv.user_id?'✓':'—'}</span></td>
+          <td><button class="btn btn-ghost btn-sm" title="View Payments" onclick="openPaymentsModal(${inv.id},'${(inv.full_name||inv.user_full_name||'Investor').replace(/'/g,\"\\\\'\")}')">💰 Payments</button></td>
           <td style="white-space:nowrap">
             <button class="btn btn-ghost btn-sm" onclick='openModal("investment-edit",${JSON.stringify(inv).replace(/'/g,"\\'")} )'>✏️</button>
             <button class="btn btn-ghost btn-sm" onclick="genCertificate(${JSON.stringify(inv).replace(/</g,'&lt;')})">📜</button>
           </td>
         </tr>`;
-      }).join('');
-  } catch (e) { toast(e.message,'error'); }
+      }).join('');  } catch (e) { toast(e.message,'error'); }
 }
 
 async function saveInvestment(id) {
-  // Need to look up user by email if provided
   let userId = null;
   const userEmail = v('if-useremail');
   if (userEmail) {
@@ -899,18 +905,94 @@ async function saveInvestment(id) {
     catch(_) {}
   }
   const body = {
-    user_id: userId, full_name: v('if-name'), amount: v('if-amount'), utr_reference: v('if-utr'),
-    investment_date: v('if-date'), kyc_status: v('if-kyc'), parent_name: v('if-parent'),
+    user_id: userId, full_name: v('if-name'), kyc_status: v('if-kyc'), parent_name: v('if-parent'),
     pan: v('if-pan')?.toUpperCase(), aadhaar: v('if-aadhaar'), mobile: v('if-mobile'),
     email: v('if-email'), address: v('if-address'), bank_acc: v('if-bankacc'),
     bank_name: v('if-bankname'), ifsc: v('if-ifsc'), notes: v('if-notes'),
     agreement_signed: v('if-agr') === 'true'
   };
+  // Only include payment fields when creating (not editing)
+  if (!id) {
+    const amt = v('if-amount'); const utr = v('if-utr'); const dt = v('if-date');
+    if (amt) body.amount = amt;
+    if (utr) body.utr_reference = utr;
+    if (dt) body.investment_date = dt;
+  }
   try {
-    if (id) { await api('PUT', `/investments/${id}`, body); toast('Investment updated'); }
+    if (id) { await api('PUT', `/investments/${id}`, body); toast('Investor updated'); }
     else { await api('POST', `/projects/${currentProject.id}/investments`, body); toast('Investor added'); }
     closeModal(); loadProjectInvestors(currentProject.id); loadProjectSummary(currentProject.id);
   } catch (e) { toast(e.message,'error'); }
+}
+
+// ── Payments Modal ──
+async function openPaymentsModal(invId, invName) {
+  const inner = document.getElementById('modal-inner');
+  document.getElementById('modal-bg').classList.add('open');
+  inner.innerHTML = paymentsModalHTML(invId, invName, []);
+  try {
+    const payments = await api('GET', `/investments/${invId}/payments`);
+    inner.innerHTML = paymentsModalHTML(invId, invName, payments);
+  } catch(e) { toast(e.message,'error'); }
+}
+
+function paymentsModalHTML(invId, invName, payments) {
+  const total = payments.reduce((s,p) => s + Number(p.amount), 0);
+  const rows = payments.length === 0
+    ? `<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">No payments recorded yet</td></tr>`
+    : payments.map(p => `<tr>
+        <td class="fz11">${fmtDate(p.payment_date)}</td>
+        <td class="mono fw7">${fmtMoney(p.amount)}</td>
+        <td class="mono fz11">${p.utr_reference||'—'}</td>
+        <td class="fz11">${p.notes||'—'}</td>
+        <td><button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="deletePayment(${invId},'${invName.replace(/'/g,"\'")}',${p.id})" title="Delete payment">🗑️</button></td>
+      </tr>`).join('');
+  return `<div class="modal-title">💰 Payments — ${invName}<button class="modal-close" onclick="closeModal()">×</button></div>
+  ${payments.length > 0 ? `<div style="display:flex;gap:10px;margin-bottom:14px">
+    <div class="stat-card" style="--c:var(--green);flex:1;min-width:0"><div class="lbl">Total Received</div><div class="val" style="font-size:20px">${fmtMoney(total)}</div></div>
+    <div class="stat-card" style="--c:var(--navy);flex:1;min-width:0"><div class="lbl">No. of Payments</div><div class="val" style="font-size:20px">${payments.length}</div></div>
+  </div>` : ''}
+  <table class="data-table" style="margin-bottom:18px">
+    <thead><tr><th>Date</th><th>Amount</th><th>UTR / Ref</th><th>Notes</th><th></th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <div style="background:#f0f7ff;border:1px solid #c8def5;border-radius:10px;padding:16px">
+    <div style="font-weight:700;color:var(--navy);margin-bottom:12px;font-size:13px">+ Add New Payment</div>
+    <div class="form-grid">
+      <div class="fg"><label>Amount (₹) *</label><input type="number" id="pmt-amount" placeholder="e.g. 200000"/></div>
+      <div class="fg"><label>UTR / Reference</label><input id="pmt-utr" placeholder="Bank transfer ref"/></div>
+      <div class="fg"><label>Date of Transfer *</label><input type="date" id="pmt-date"/></div>
+      <div class="fg"><label>Notes</label><input id="pmt-notes" placeholder="Optional"/></div>
+    </div>
+    <button class="btn btn-primary" style="margin-top:6px" onclick="addPayment(${invId},'${invName.replace(/'/g,"\'")}')">Record Payment</button>
+  </div>`;
+}
+
+async function addPayment(invId, invName) {
+  const amount = v('pmt-amount');
+  const payment_date = v('pmt-date');
+  if (!amount || !payment_date) { toast('Amount and date are required','error'); return; }
+  try {
+    await api('POST', `/investments/${invId}/payments`, {
+      amount, payment_date, utr_reference: v('pmt-utr'), notes: v('pmt-notes')
+    });
+    toast('Payment recorded');
+    loadProjectInvestors(currentProject.id);
+    loadProjectSummary(currentProject.id);
+    // Refresh the modal in place
+    openPaymentsModal(invId, invName);
+  } catch(e) { toast(e.message,'error'); }
+}
+
+async function deletePayment(invId, invName, pmtId) {
+  if (!confirm('Delete this payment? This will also reduce the investor total.')) return;
+  try {
+    await api('DELETE', `/investments/${invId}/payments/${pmtId}`);
+    toast('Payment deleted');
+    loadProjectInvestors(currentProject.id);
+    loadProjectSummary(currentProject.id);
+    openPaymentsModal(invId, invName);
+  } catch(e) { toast(e.message,'error'); }
 }
 
 // ════════════════════════════════════════

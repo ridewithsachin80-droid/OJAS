@@ -333,8 +333,7 @@ app.get('/api/investments/mine', auth(), async (req, res) => {
 });
 
 app.post('/api/projects/:id/investments', auth('admin'), async (req, res) => {
-  const { user_id, amount, utr_reference, investment_date, kyc_status, parent_name, pan, aadhaar, mobile, email, address, bank_acc, bank_name, ifsc, notes } = req.body;
-  if (!amount) return res.status(400).json({ error: 'Amount required' });
+  const { user_id, amount, utr_reference, investment_date, kyc_status, parent_name, pan, aadhaar, mobile, email, address, bank_acc, bank_name, ifsc, notes, full_name } = req.body;
   try {
     const pid = req.params.id;
     const year = new Date().getFullYear();
@@ -343,30 +342,34 @@ app.post('/api/projects/:id/investments', auth('admin'), async (req, res) => {
     const codeR = await pool.query('SELECT code FROM projects WHERE id=$1', [pid]);
     const pcode = (codeR.rows[0]?.code || pid).toUpperCase();
     const investor_code = `${pcode}-${year}-${seq}`;
-    const { full_name } = req.body;
+    const initialAmount = amount ? parseInt(amount) : 0;
     const r = await pool.query(
       `INSERT INTO investments (investor_code,user_id,project_id,amount,utr_reference,investment_date,kyc_status,full_name,parent_name,pan,aadhaar,mobile,email,address,bank_acc,bank_name,ifsc,notes)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
-      [investor_code, user_id||null, pid, amount, utr_reference||null, investment_date||null, kyc_status||'pending', full_name||null, parent_name||null, pan||null, aadhaar||null, mobile||null, email||null, address||null, bank_acc||null, bank_name||null, ifsc||null, notes||null]
-    );
-    // Record as capital_in transaction
-    await pool.query(
-      'INSERT INTO transactions (project_id,type,category,amount,description,transaction_date,reference,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
-      [pid, 'capital_in', 'Investor Capital', amount, `Capital from ${investor_code}`, investment_date||new Date().toISOString().slice(0,10), utr_reference||null, req.user.id]
+      [investor_code, user_id||null, pid, initialAmount, utr_reference||null, investment_date||null, kyc_status||'pending', full_name||null, parent_name||null, pan||null, aadhaar||null, mobile||null, email||null, address||null, bank_acc||null, bank_name||null, ifsc||null, notes||null]
     );
     const inv = r.rows[0];
-    // Notify investor
-    if (user_id) {
+    if (initialAmount > 0) {
+      await pool.query(
+        'INSERT INTO investor_payments (investment_id,amount,utr_reference,payment_date,notes,created_by) VALUES ($1,$2,$3,$4,$5,$6)',
+        [inv.id, initialAmount, utr_reference||null, investment_date||null, null, req.user.id]
+      );
+      await pool.query(
+        'INSERT INTO transactions (project_id,type,category,amount,description,transaction_date,reference,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+        [pid, 'capital_in', 'Investor Capital', initialAmount, `Capital from ${investor_code}`, investment_date||new Date().toISOString().slice(0,10), utr_reference||null, req.user.id]
+      );
+    }
+    if (user_id && initialAmount > 0) {
       setImmediate(async () => {
         try {
           const userR = await pool.query('SELECT full_name,email,mobile FROM users WHERE id=$1', [user_id]);
           const projR = await pool.query('SELECT name FROM projects WHERE id=$1', [pid]);
           const totalR = await pool.query('SELECT SUM(amount) FROM investments WHERE project_id=$1', [pid]);
-          const share = totalR.rows[0].sum > 0 ? (amount / totalR.rows[0].sum * 100).toFixed(2) : '0';
+          const share = totalR.rows[0].sum > 0 ? (initialAmount / totalR.rows[0].sum * 100).toFixed(2) : '0';
           if (userR.rows.length) {
             await notify('investmentConfirmed', {
               investorCode: investor_code,
-              amount, share,
+              amount: initialAmount, share,
               projectName: projR.rows[0]?.name || 'Project',
               date: investment_date || new Date().toISOString().slice(0,10)
             }, [{ email: userR.rows[0].email, mobile: userR.rows[0].mobile, name: userR.rows[0].full_name }]);
@@ -378,14 +381,57 @@ app.post('/api/projects/:id/investments', auth('admin'), async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Investor Payments (multiple payments per investor) ──
+app.get('/api/investments/:id/payments', auth('admin'), async (req, res) => {
+  try {
+    const r = await pool.query(
+      'SELECT p.*,u.full_name as created_by_name FROM investor_payments p LEFT JOIN users u ON u.id=p.created_by WHERE p.investment_id=$1 ORDER BY p.payment_date DESC,p.created_at DESC',
+      [req.params.id]
+    );
+    res.json(r.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/investments/:id/payments', auth('admin'), async (req, res) => {
+  const { amount, utr_reference, payment_date, notes } = req.body;
+  if (!amount || !payment_date) return res.status(400).json({ error: 'Amount and payment date are required' });
+  try {
+    const invId = req.params.id;
+    const invR = await pool.query('SELECT * FROM investments WHERE id=$1', [invId]);
+    if (!invR.rows.length) return res.status(404).json({ error: 'Investor not found' });
+    const inv = invR.rows[0];
+    const pr = await pool.query(
+      'INSERT INTO investor_payments (investment_id,amount,utr_reference,payment_date,notes,created_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
+      [invId, parseInt(amount), utr_reference||null, payment_date, notes||null, req.user.id]
+    );
+    await pool.query('UPDATE investments SET amount=amount+$1,updated_at=NOW() WHERE id=$2', [parseInt(amount), invId]);
+    await pool.query(
+      'INSERT INTO transactions (project_id,type,category,amount,description,transaction_date,reference,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+      [inv.project_id, 'capital_in', 'Investor Capital', parseInt(amount), `Payment from ${inv.investor_code}`, payment_date, utr_reference||null, req.user.id]
+    );
+    res.json(pr.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/investments/:id/payments/:pid', auth('admin'), async (req, res) => {
+  try {
+    const pmtR = await pool.query('SELECT * FROM investor_payments WHERE id=$1 AND investment_id=$2', [req.params.pid, req.params.id]);
+    if (!pmtR.rows.length) return res.status(404).json({ error: 'Payment not found' });
+    const pmt = pmtR.rows[0];
+    await pool.query('DELETE FROM investor_payments WHERE id=$1', [req.params.pid]);
+    await pool.query('UPDATE investments SET amount=GREATEST(0,amount-$1),updated_at=NOW() WHERE id=$2', [pmt.amount, req.params.id]);
+    res.json({ message: 'Payment deleted' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.put('/api/investments/:id', auth('admin'), async (req, res) => {
-  const { amount, utr_reference, investment_date, kyc_status, full_name, parent_name, pan, aadhaar, mobile, email, address, bank_acc, bank_name, ifsc, notes, agreement_signed } = req.body;
+  const { kyc_status, full_name, parent_name, pan, aadhaar, mobile, email, address, bank_acc, bank_name, ifsc, notes, agreement_signed } = req.body;
   try {
     await pool.query(
-      `UPDATE investments SET amount=$1,utr_reference=$2,investment_date=$3,kyc_status=$4,full_name=$5,parent_name=$6,pan=$7,aadhaar=$8,mobile=$9,email=$10,address=$11,bank_acc=$12,bank_name=$13,ifsc=$14,notes=$15,agreement_signed=$16,updated_at=NOW() WHERE id=$17`,
-      [amount, utr_reference||null, investment_date||null, kyc_status||'pending', full_name||null, parent_name||null, pan||null, aadhaar||null, mobile||null, email||null, address||null, bank_acc||null, bank_name||null, ifsc||null, notes||null, agreement_signed||false, req.params.id]
+      `UPDATE investments SET kyc_status=$1,full_name=$2,parent_name=$3,pan=$4,aadhaar=$5,mobile=$6,email=$7,address=$8,bank_acc=$9,bank_name=$10,ifsc=$11,notes=$12,agreement_signed=$13,updated_at=NOW() WHERE id=$14`,
+      [kyc_status||'pending', full_name||null, parent_name||null, pan||null, aadhaar||null, mobile||null, email||null, address||null, bank_acc||null, bank_name||null, ifsc||null, notes||null, agreement_signed||false, req.params.id]
     );
-    res.json({ message: 'Investment updated' });
+    res.json({ message: 'Investor updated' });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

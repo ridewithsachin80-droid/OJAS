@@ -167,12 +167,32 @@ CREATE TABLE IF NOT EXISTS site_sale_documents (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Investor Payments (multiple payments per investor)
+CREATE TABLE IF NOT EXISTS investor_payments (
+  id SERIAL PRIMARY KEY,
+  investment_id INTEGER REFERENCES investments(id) ON DELETE CASCADE,
+  amount BIGINT NOT NULL,
+  utr_reference VARCHAR(255),
+  payment_date DATE,
+  notes TEXT,
+  created_by INTEGER REFERENCES users(id),
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_investor_payments_investment ON investor_payments(investment_id);
+
 -- Create indexes
 -- Add full_name to investments if not exists (safe for existing DBs)
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='investments' AND column_name='full_name') THEN
     ALTER TABLE investments ADD COLUMN full_name VARCHAR(255);
   END IF;
+END $$;
+
+-- Make investments.amount allow 0 default for existing DBs (investors without initial payment)
+DO $$ BEGIN
+  ALTER TABLE investments ALTER COLUMN amount SET DEFAULT 0;
+EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
 
 CREATE INDEX IF NOT EXISTS idx_investments_project ON investments(project_id);
