@@ -91,6 +91,17 @@ app.post('/api/admin/test-notification', auth('admin'), async (req, res) => {
 // ══════════════════════════════════════════
 // AUTH
 // ══════════════════════════════════════════
+const crypto = require('crypto');
+
+// Helper: get a simple device label from user-agent
+function deviceLabel(ua = '') {
+  if (/mobile|android|iphone|ipad/i.test(ua)) return 'Mobile — ' + ua.slice(0, 40);
+  if (/windows/i.test(ua)) return 'Windows — ' + ua.slice(0, 40);
+  if (/mac/i.test(ua)) return 'Mac — ' + ua.slice(0, 40);
+  if (/linux/i.test(ua)) return 'Linux — ' + ua.slice(0, 40);
+  return 'Browser — ' + ua.slice(0, 40);
+}
+
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
@@ -100,8 +111,129 @@ app.post('/api/auth/login', async (req, res) => {
     const user = r.rows[0];
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role, name: user.full_name }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token, user: { id: user.id, email: user.email, role: user.role, name: user.full_name } });
+
+    const token = jwt.sign({ id: user.id, email: user.email, role: user.role, name: user.full_name }, JWT_SECRET, { expiresIn: '24h' });
+
+    // Check if device is already trusted
+    const deviceToken = req.headers['x-device-token'];
+    const requireDevice = process.env.REQUIRE_DEVICE_TRUST !== 'false';
+
+    if (requireDevice && deviceToken) {
+      const devR = await pool.query(
+        'SELECT id FROM trusted_devices WHERE device_token=$1 AND user_id=$2 AND is_active=TRUE',
+        [deviceToken, user.id]
+      );
+      if (devR.rows.length) {
+        // Known trusted device — log in directly
+        pool.query('UPDATE trusted_devices SET last_seen=NOW() WHERE device_token=$1', [deviceToken]).catch(() => {});
+        return res.json({ token, user: { id: user.id, email: user.email, role: user.role, name: user.full_name }, device_trusted: true });
+      }
+    }
+
+    if (requireDevice) {
+      // New/unknown device — send OTP before granting access
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      await pool.query('DELETE FROM device_otps WHERE user_id=$1', [user.id]); // clear old OTPs
+      await pool.query(
+        'INSERT INTO device_otps (user_id, otp_code, expires_at) VALUES ($1,$2,NOW()+INTERVAL \'10 minutes\')',
+        [user.id, otp]
+      );
+      // Send OTP via email/whatsapp
+      const { sendEmail, sendWhatsApp } = require('./notifications');
+      const otpMsg = `Your InvestTrack device verification code is: *${otp}*\n\nThis code expires in 10 minutes. Do not share it with anyone.`;
+      if (user.email) {
+        sendEmail({ to: user.email, subject: 'InvestTrack — Device Verification Code',
+          html: `<div style="font-family:sans-serif;max-width:480px;margin:auto"><h2 style="color:#0F1E3D">Device Verification</h2><p>Someone is trying to log in to InvestTrack from a new device.</p><div style="font-size:32px;font-weight:bold;letter-spacing:8px;text-align:center;padding:20px;background:#F8FAFC;border-radius:8px;color:#0F1E3D">${otp}</div><p style="color:#666;font-size:13px">This code expires in 10 minutes. If this wasn't you, your password may be compromised.</p></div>`,
+          text: otpMsg
+        }).catch(e => console.error('OTP email error:', e.message));
+      }
+      if (user.mobile) {
+        sendWhatsApp(user.mobile, otpMsg).catch(e => console.error('OTP WA error:', e.message));
+      }
+      // Return partial auth with otp_required flag (temp token for OTP step only)
+      const tempToken = jwt.sign({ id: user.id, otp_step: true }, JWT_SECRET, { expiresIn: '15m' });
+      return res.status(202).json({ otp_required: true, temp_token: tempToken, message: 'OTP sent to your registered email/mobile.' });
+    }
+
+    // Device trust not required (REQUIRE_DEVICE_TRUST=false)
+    res.json({ token, user: { id: user.id, email: user.email, role: user.role, name: user.full_name }, device_trusted: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Verify OTP and register device ──
+app.post('/api/auth/verify-device', async (req, res) => {
+  const { otp_code } = req.body;
+  const tempToken = req.headers.authorization?.slice(7);
+  if (!tempToken || !otp_code) return res.status(400).json({ error: 'OTP and temp token required' });
+  try {
+    let payload;
+    try { payload = jwt.verify(tempToken, JWT_SECRET); }
+    catch { return res.status(401).json({ error: 'Session expired. Please log in again.' }); }
+    if (!payload.otp_step) return res.status(400).json({ error: 'Invalid token type' });
+
+    const otpR = await pool.query(
+      'SELECT * FROM device_otps WHERE user_id=$1 AND otp_code=$2 AND used=FALSE AND expires_at > NOW()',
+      [payload.id, otp_code.toString().trim()]
+    );
+    if (!otpR.rows.length) return res.status(400).json({ error: 'Invalid or expired OTP. Please try again.' });
+
+    // Mark OTP as used
+    await pool.query('UPDATE device_otps SET used=TRUE WHERE id=$1', [otpR.rows[0].id]);
+
+    // Issue a device token and store it
+    const deviceToken = crypto.randomBytes(48).toString('hex');
+    const ua = req.headers['user-agent'] || '';
+    await pool.query(
+      'INSERT INTO trusted_devices (user_id, device_token, device_label) VALUES ($1,$2,$3)',
+      [payload.id, deviceToken, deviceLabel(ua)]
+    );
+
+    // Issue full JWT
+    const userR = await pool.query('SELECT id,email,role,full_name FROM users WHERE id=$1', [payload.id]);
+    const user = userR.rows[0];
+    const token = jwt.sign({ id: user.id, email: user.email, role: user.role, name: user.full_name }, JWT_SECRET, { expiresIn: '24h' });
+    res.json({ token, device_token: deviceToken, user: { id: user.id, email: user.email, role: user.role, name: user.full_name } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── List trusted devices (user sees their own, admin can see all) ──
+app.get('/api/auth/devices', auth(), async (req, res) => {
+  try {
+    const r = await pool.query(
+      'SELECT id,device_label,last_seen,created_at,is_active FROM trusted_devices WHERE user_id=$1 ORDER BY last_seen DESC',
+      [req.user.id]
+    );
+    res.json(r.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Revoke a specific device ──
+app.delete('/api/auth/devices/:id', auth(), async (req, res) => {
+  try {
+    await pool.query(
+      'UPDATE trusted_devices SET is_active=FALSE WHERE id=$1 AND user_id=$2',
+      [req.params.id, req.user.id]
+    );
+    res.json({ message: 'Device revoked' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Admin: revoke any device ──
+app.delete('/api/admin/devices/:id', auth('admin'), async (req, res) => {
+  try {
+    await pool.query('UPDATE trusted_devices SET is_active=FALSE WHERE id=$1', [req.params.id]);
+    res.json({ message: 'Device revoked' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Admin: list all devices for a user ──
+app.get('/api/admin/users/:id/devices', auth('admin'), async (req, res) => {
+  try {
+    const r = await pool.query(
+      'SELECT id,device_label,last_seen,created_at,is_active FROM trusted_devices WHERE user_id=$1 ORDER BY last_seen DESC',
+      [req.params.id]
+    );
+    res.json(r.rows);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

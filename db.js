@@ -201,6 +201,31 @@ CREATE INDEX IF NOT EXISTS idx_transactions_project ON transactions(project_id);
 CREATE INDEX IF NOT EXISTS idx_documents_project ON documents(project_id);
 CREATE INDEX IF NOT EXISTS idx_stage_updates_project ON stage_updates(project_id);
 CREATE INDEX IF NOT EXISTS idx_site_sales_project ON site_sales(project_id);
+-- Trusted Devices
+CREATE TABLE IF NOT EXISTS trusted_devices (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  device_token VARCHAR(128) UNIQUE NOT NULL,
+  device_label VARCHAR(255),
+  last_seen TIMESTAMP DEFAULT NOW(),
+  created_at TIMESTAMP DEFAULT NOW(),
+  is_active BOOLEAN DEFAULT TRUE
+);
+
+-- OTP Codes (for new device verification)
+CREATE TABLE IF NOT EXISTS device_otps (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  otp_code VARCHAR(6) NOT NULL,
+  expires_at TIMESTAMP NOT NULL,
+  used BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_trusted_devices_user ON trusted_devices(user_id);
+CREATE INDEX IF NOT EXISTS idx_trusted_devices_token ON trusted_devices(device_token);
+CREATE INDEX IF NOT EXISTS idx_device_otps_user ON device_otps(user_id);
+
 `;
 
 const defaultMilestones = [

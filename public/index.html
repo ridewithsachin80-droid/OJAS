@@ -524,6 +524,20 @@ table.dt tr:hover td{background:#FAFBFF}
             <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 16px;font-size:13px" id="inv-profile-info"></div>
           </div>
         </div>
+
+        <!-- Trusted Devices (shown for all roles) -->
+        <div class="card" style="max-width:600px">
+          <div class="card-hd" style="display:flex;justify-content:space-between;align-items:center">
+            <span class="card-title">🔒 Trusted Devices</span>
+            <span style="font-size:11px;color:var(--muted)">Devices that can access your account</span>
+          </div>
+          <div class="card-body">
+            <div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:12px;color:#92400E">
+              ⚠️ Each new browser or device must verify via OTP before it can log in. Revoke any device you no longer use or don't recognise.
+            </div>
+            <div id="trusted-devices-list"><p style="color:var(--muted);font-size:13px">Loading…</p></div>
+          </div>
+        </div>
       </div>
 
     </div><!-- /content -->
@@ -540,6 +554,7 @@ table.dt tr:hover td{background:#FAFBFF}
 // STATE
 // ════════════════════════════════════════
 let token = sessionStorage.getItem('it_token') || '';
+let deviceToken = localStorage.getItem('it_device') || '';
 let currentUser = null;
 let currentProject = null;
 let currentInvestment = null;
@@ -548,11 +563,15 @@ let currentInvestment = null;
 // API HELPER
 // ════════════════════════════════════════
 async function api(method, path, body, isFormData) {
-  const opts = { method, headers: { 'Authorization': `Bearer ${token}` } };
+  const opts = { method, headers: { 'Authorization': `Bearer ${token}`, 'X-Device-Token': deviceToken } };
   if (isFormData) { opts.body = body; }
   else if (body) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
   const r = await fetch('/api' + path, opts);
   if (r.status === 401) { doLogout(); return null; }
+  if (r.status === 403) {
+    const d = await r.json().catch(() => ({}));
+    if (d.error === 'untrusted_device') { doLogout(); return null; }
+  }
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data.error || 'Request failed');
   return data;
@@ -574,11 +593,21 @@ function pct(n, t) { return t > 0 ? (n/t*100).toFixed(2) : '0.00'; }
 async function doLogin() {
   const btn = document.getElementById('login-btn');
   btn.textContent = 'Signing in…'; btn.disabled = true;
+  document.getElementById('login-error').textContent = '';
   try {
     const email = document.getElementById('login-email').value;
     const password = document.getElementById('login-password').value;
-    const data = await fetch('/api/auth/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({email,password}) });
+    const data = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Device-Token': deviceToken },
+      body: JSON.stringify({ email, password })
+    });
     const json = await data.json();
+    if (data.status === 202 && json.otp_required) {
+      // New device — show OTP verification screen
+      showOtpScreen(json.temp_token, json.message);
+      return;
+    }
     if (!data.ok) throw new Error(json.error || 'Login failed');
     token = json.token;
     currentUser = json.user;
@@ -590,11 +619,64 @@ async function doLogin() {
   } finally { btn.textContent = 'Sign In →'; btn.disabled = false; }
 }
 
+function showOtpScreen(tempToken, message) {
+  const box = document.querySelector('.auth-box');
+  box.innerHTML = `
+    <div class="auth-logo">
+      <h1>🔐 Verify Device</h1>
+      <p>New device detected</p>
+    </div>
+    <div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;padding:12px 14px;margin-bottom:18px;font-size:12px;color:#1E40AF;line-height:1.5">
+      <strong>📨 OTP sent!</strong><br>${message || 'Check your registered email or WhatsApp for the 6-digit verification code.'}
+    </div>
+    <div class="fg" style="margin-bottom:20px">
+      <label>Enter 6-digit OTP</label>
+      <input type="text" id="otp-input" placeholder="000000" maxlength="6" inputmode="numeric"
+        style="letter-spacing:8px;font-size:22px;text-align:center;font-weight:700"
+        onkeydown="if(event.key==='Enter')verifyOtp('${tempToken}')"/>
+    </div>
+    <button class="btn btn-primary" style="width:100%;padding:11px" onclick="verifyOtp('${tempToken}')" id="otp-btn">Verify & Trust this Device</button>
+    <p id="otp-error" style="color:var(--red);font-size:11px;margin-top:10px;text-align:center"></p>
+    <p style="text-align:center;margin-top:14px">
+      <a href="#" onclick="location.reload()" style="font-size:12px;color:var(--muted)">← Back to login</a>
+    </p>`;
+}
+
+async function verifyOtp(tempToken) {
+  const btn = document.getElementById('otp-btn');
+  btn.textContent = 'Verifying…'; btn.disabled = true;
+  document.getElementById('otp-error').textContent = '';
+  try {
+    const otp_code = document.getElementById('otp-input').value.trim();
+    const r = await fetch('/api/auth/verify-device', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tempToken },
+      body: JSON.stringify({ otp_code })
+    });
+    const json = await r.json();
+    if (!r.ok) throw new Error(json.error || 'Verification failed');
+    // Store device token permanently in localStorage (survives browser close)
+    deviceToken = json.device_token;
+    localStorage.setItem('it_device', deviceToken);
+    token = json.token;
+    currentUser = json.user;
+    sessionStorage.setItem('it_token', token);
+    sessionStorage.setItem('it_user', JSON.stringify(currentUser));
+    bootApp();
+  } catch (e) {
+    document.getElementById('otp-error').textContent = e.message;
+    btn.textContent = 'Verify & Trust this Device'; btn.disabled = false;
+  }
+}
+
 function doLogout() {
   token = ''; currentUser = null;
   sessionStorage.clear();
+  // Note: deviceToken (localStorage) is intentionally preserved so the device stays trusted
   document.getElementById('auth-screen').style.display = 'flex';
   document.getElementById('app').style.display = 'none';
+  // Restore the original auth box if OTP screen was shown
+  if (!document.getElementById('login-email')) location.reload();
 }
 
 async function bootApp() {
@@ -1747,6 +1829,40 @@ async function loadSettingsPage() {
       }
     } catch(e) {}
   }
+  // Load trusted devices for all roles
+  loadMyDevices();
+}
+
+async function loadMyDevices() {
+  const el = document.getElementById('trusted-devices-list');
+  if (!el) return;
+  try {
+    const devices = await api('GET', '/auth/devices');
+    if (!devices) return;
+    if (devices.length === 0) {
+      el.innerHTML = '<p style="color:var(--muted);font-size:13px">No trusted devices recorded yet.</p>';
+      return;
+    }
+    el.innerHTML = devices.map(d => {
+      const isThis = d.device_label && navigator.userAgent.startsWith(d.device_label.split(' — ')[1]?.slice(0,20) || '___');
+      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">' +
+        '<div>' +
+          '<div style="font-weight:600;font-size:13px">' + (d.device_label || 'Unknown device') + (d.is_active ? '' : ' <span style="color:var(--red)">[revoked]</span>') + '</div>' +
+          '<div style="font-size:11px;color:var(--muted)">Last seen: ' + fmtDate(d.last_seen) + ' · Added: ' + fmtDate(d.created_at) + '</div>' +
+        '</div>' +
+        (d.is_active ? '<button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="revokeDevice(' + d.id + ')">Revoke</button>' : '') +
+      '</div>';
+    }).join('');
+  } catch(e) { console.error(e); }
+}
+
+async function revokeDevice(id) {
+  if (!confirm('Revoke this device? It will need to re-verify via OTP to log in again.')) return;
+  try {
+    await api('DELETE', '/auth/devices/' + id);
+    toast('Device revoked');
+    loadMyDevices();
+  } catch(e) { toast(e.message, 'error'); }
 }
 
 async function saveAdminProfile() {
