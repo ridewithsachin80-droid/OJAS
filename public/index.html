@@ -334,8 +334,44 @@ table.dt tr:hover td{background:#FAFBFF}
             <div class="card-title">Accounts & Transactions</div>
             <button class="btn btn-primary btn-sm" onclick="openModal('txn-form')">+ Add Entry</button>
           </div>
+
+          <!-- Summary Cards -->
           <div class="stat-grid" id="acct-stats"></div>
-          <div class="card"><div class="tbl-wrap"><table class="dt" id="txn-table"><thead><tr><th>Date</th><th>Type</th><th>Category</th><th>Description</th><th>Reference</th><th>Amount (₹)</th><th></th></tr></thead><tbody id="txn-body"></tbody></table></div></div>
+
+          <!-- P&L Strip -->
+          <div id="acct-pl" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:16px"></div>
+
+          <!-- Filter Bar -->
+          <div class="card" style="padding:12px 16px;margin-bottom:12px">
+            <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+              <select id="acct-filter-type" onchange="applyTxnFilters()" style="border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:13px;background:var(--bg2)">
+                <option value="">All Types</option>
+                <option value="capital_in">Capital In</option>
+                <option value="income">Income</option>
+                <option value="expense">Expense</option>
+                <option value="profit_distribution">Profit Distribution</option>
+              </select>
+              <select id="acct-filter-cat" onchange="applyTxnFilters()" style="border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:13px;background:var(--bg2)">
+                <option value="">All Categories</option>
+              </select>
+              <input type="month" id="acct-filter-month" onchange="applyTxnFilters()" style="border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:13px;background:var(--bg2)" placeholder="Month"/>
+              <input type="text" id="acct-filter-search" oninput="applyTxnFilters()" placeholder="Search description / reference…" style="border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:13px;background:var(--bg2);flex:1;min-width:160px"/>
+              <button class="btn btn-outline btn-sm" onclick="clearTxnFilters()">Clear</button>
+              <button class="btn btn-outline btn-sm" onclick="exportTxnCSV()">⬇ CSV</button>
+            </div>
+          </div>
+
+          <!-- Category Breakdown -->
+          <div id="acct-cat-breakdown" style="margin-bottom:12px"></div>
+
+          <!-- Ledger Table -->
+          <div class="card"><div class="tbl-wrap">
+            <table class="dt" id="txn-table">
+              <thead><tr><th>Date</th><th>Type</th><th>Category</th><th>Description</th><th>Reference</th><th>By</th><th style="text-align:right">Amount (₹)</th><th style="text-align:right">Balance (₹)</th><th></th></tr></thead>
+              <tbody id="txn-body"></tbody>
+              <tfoot id="txn-foot"></tfoot>
+            </table>
+          </div></div>
         </div>
 
         <div id="pt-milestones" class="ptab-content" style="display:none">
@@ -1113,67 +1149,222 @@ async function deletePayment(invId, pmtId) {
 // TRANSACTIONS
 // ════════════════════════════════════════
 function txnFormHTML(t) {
-  const cats = { income: ['Site Sale','Other Income'], expense: ['Land Purchase','Construction','Approval Fees','Legal & Registration','Marketing','Admin','Other Expense'], capital_in: ['Investor Capital'], profit_distribution: ['Investor Payout','Working Group Payout'] };
-  return `<div class="modal-title">${t?'Edit':'New'} Transaction<button class="modal-close" onclick="closeModal()">×</button></div>
-  <div class="form-grid">
-    <div class="fg"><label>Type *</label>
-      <select id="tf-type" onchange="updateCats()">
-        <option value="income">Income</option>
-        <option value="expense">Expense</option>
-        <option value="capital_in">Capital In</option>
-        <option value="profit_distribution">Profit Distribution</option>
-      </select>
-    </div>
-    <div class="fg"><label>Category</label><select id="tf-cat"><option>—</option></select></div>
-    <div class="fg"><label>Amount (₹) *</label><input type="number" id="tf-amount" value="${t?.amount||''}"/></div>
-    <div class="fg"><label>Date *</label><input type="date" id="tf-date" value="${t?.transaction_date?.slice(0,10)||''}"/></div>
-    <div class="fg full"><label>Description</label><input id="tf-desc" value="${t?.description||''}"/></div>
-    <div class="fg"><label>Reference / Cheque No.</label><input id="tf-ref" value="${t?.reference||''}"/></div>
-  </div>
-  <div class="form-actions">
-    <button class="btn btn-primary" onclick="saveTxn()">Save Entry</button>
-    <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
-  </div>
-  <script>function updateCats(){const cats=${JSON.stringify(cats)};const t=document.getElementById('tf-type').value;const s=document.getElementById('tf-cat');s.innerHTML=(cats[t]||[]).map(c=>'<option>'+c+'</option>').join('');}updateCats();<\/script>`;
+  const cats = { income: ['Site Sale','Rental Income','Other Income'], expense: ['Land Purchase','Construction','Approval Fees','Legal & Registration','Marketing','Admin','Utilities','Labour','Materials','Other Expense'], capital_in: ['Investor Capital'], profit_distribution: ['Investor Payout','Working Group Payout'] };
+  const typeColors = { income:'badge-green', expense:'badge-red', capital_in:'badge-blue', profit_distribution:'badge-gold' };
+  return '<div class="modal-title">' + (t?'Edit':'New') + ' Transaction<button class="modal-close" onclick="closeModal()">×</button></div>' +
+  '<div class="form-grid">' +
+    '<div class="fg"><label>Type *</label>' +
+      '<select id="tf-type" onchange="txnUpdateCats()">' +
+        '<option value="income">Income</option>' +
+        '<option value="expense">Expense</option>' +
+        '<option value="capital_in">Capital In</option>' +
+        '<option value="profit_distribution">Profit Distribution</option>' +
+      '</select></div>' +
+    '<div class="fg"><label>Category *</label><select id="tf-cat"><option>—</option></select></div>' +
+    '<div class="fg"><label>Amount (₹) *</label><input type="number" id="tf-amount" value="' + (t?.amount||'') + '" min="1"/></div>' +
+    '<div class="fg"><label>Date *</label><input type="date" id="tf-date" value="' + (t?.transaction_date?.slice(0,10)||new Date().toISOString().slice(0,10)) + '"/></div>' +
+    '<div class="fg full"><label>Description</label><input id="tf-desc" value="' + (t?.description||'') + '" placeholder="What is this for?"/></div>' +
+    '<div class="fg"><label>Reference / Cheque / UTR</label><input id="tf-ref" value="' + (t?.reference||'') + '" placeholder="e.g. TXN123456"/></div>' +
+    '<div class="fg"><label>Paid To / Received From</label><input id="tf-party" value="' + (t?.party||'') + '" placeholder="Vendor or investor name"/></div>' +
+  '</div>' +
+  '<div class="form-actions">' +
+    '<button class="btn btn-primary" onclick="saveTxn()">Save Entry</button>' +
+    '<button class="btn btn-outline" onclick="closeModal()">Cancel</button>' +
+  '</div>' +
+  '<' + 'script>var _txnCats=' + JSON.stringify(cats) + ';function txnUpdateCats(){var tp=document.getElementById("tf-type").value;var s=document.getElementById("tf-cat");s.innerHTML=(_txnCats[tp]||[]).map(function(c){return"<option>"+c+"</option>";}).join("");}txnUpdateCats();<' + '/script>';
 }
+
+// ── All transactions data store for filtering ──
+let _allTxns = [];
 
 async function loadProjectAccounts(pid) {
   try {
-    const txns = await api('GET', `/projects/${pid}/transactions`);
-    const income = txns.filter(t=>t.type==='income'||t.type==='capital_in').reduce((s,t)=>s+Number(t.amount),0);
-    const expense = txns.filter(t=>t.type==='expense').reduce((s,t)=>s+Number(t.amount),0);
-    const payout = txns.filter(t=>t.type==='profit_distribution').reduce((s,t)=>s+Number(t.amount),0);
-    document.getElementById('acct-stats').innerHTML = `
-      <div class="stat-card" style="--c:var(--green)"><div class="lbl">Total Income & Capital</div><div class="val">${fmtMoney(income)}</div></div>
-      <div class="stat-card" style="--c:var(--red)"><div class="lbl">Total Expense</div><div class="val">${fmtMoney(expense)}</div></div>
-      <div class="stat-card" style="--c:var(--gold)"><div class="lbl">Profit Distributed</div><div class="val">${fmtMoney(payout)}</div></div>
-      <div class="stat-card" style="--c:var(--navy)"><div class="lbl">Net Balance</div><div class="val">${fmtMoney(income-expense-payout)}</div></div>`;
-    const body = document.getElementById('txn-body');
-    body.innerHTML = txns.length === 0 ? `<tr><td colspan="7"><div class="empty-state"><div class="ei">📒</div><p>No transactions yet</p></div></td></tr>` :
-      txns.map(t => {
-        const isIn = t.type==='income'||t.type==='capital_in';
-        return `<tr>
-          <td class="fz11">${fmtDate(t.transaction_date)}</td>
-          <td><span class="badge ${isIn?'badge-green':t.type==='profit_distribution'?'badge-gold':'badge-red'}">${t.type.replace('_',' ')}</span></td>
-          <td class="fz11">${t.category||'—'}</td>
-          <td>${t.description||'—'}</td>
-          <td class="mono fz11">${t.reference||'—'}</td>
-          <td class="mono fw7 ${isIn?'text-green':'text-red'}">${isIn?'+':'-'}${fmtMoney(t.amount)}</td>
-          <td><button class="btn btn-ghost btn-sm" onclick="deleteTxn(${t.id})">🗑</button></td>
-        </tr>`;
-      }).join('');
+    _allTxns = await api('GET', `/projects/${pid}/transactions`);
+    if (!_allTxns) return;
+    renderAccounts(_allTxns);
+    buildCatFilter(_allTxns);
   } catch (e) { toast(e.message,'error'); }
 }
 
-async function saveTxn() {
-  const body = { type: v('tf-type'), category: v('tf-cat'), amount: v('tf-amount'), description: v('tf-desc'), transaction_date: v('tf-date'), reference: v('tf-ref') };
-  try { await api('POST', `/projects/${currentProject.id}/transactions`, body); toast('Entry added'); closeModal(); loadProjectAccounts(currentProject.id); loadProjectSummary(currentProject.id); }
-  catch (e) { toast(e.message,'error'); }
+function renderAccounts(txns) {
+  // ── Summary cards ──
+  const capital = txns.filter(t=>t.type==='capital_in').reduce((s,t)=>s+Number(t.amount),0);
+  const income  = txns.filter(t=>t.type==='income').reduce((s,t)=>s+Number(t.amount),0);
+  const expense = txns.filter(t=>t.type==='expense').reduce((s,t)=>s+Number(t.amount),0);
+  const payout  = txns.filter(t=>t.type==='profit_distribution').reduce((s,t)=>s+Number(t.amount),0);
+  const totalIn = capital + income;
+  const balance = totalIn - expense - payout;
+  const grossProfit = income - expense;
+
+  document.getElementById('acct-stats').innerHTML =
+    '<div class="stat-card" style="--c:var(--blue)"><div class="lbl">Capital Raised</div><div class="val">' + fmtMoney(capital) + '</div></div>' +
+    '<div class="stat-card" style="--c:var(--green)"><div class="lbl">Sales Income</div><div class="val">' + fmtMoney(income) + '</div></div>' +
+    '<div class="stat-card" style="--c:var(--red)"><div class="lbl">Total Expenses</div><div class="val">' + fmtMoney(expense) + '</div></div>' +
+    '<div class="stat-card" style="--c:var(--gold)"><div class="lbl">Profit Distributed</div><div class="val">' + fmtMoney(payout) + '</div></div>' +
+    '<div class="stat-card" style="--c:var(--navy)"><div class="lbl">Cash Balance</div><div class="val">' + fmtMoney(balance) + '</div></div>';
+
+  // ── P&L strip ──
+  const plColor = grossProfit >= 0 ? 'var(--green)' : 'var(--red)';
+  document.getElementById('acct-pl').innerHTML =
+    '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:6px">' +
+      '<div style="font-weight:700;font-size:12px;color:var(--muted);letter-spacing:.5px;text-transform:uppercase;margin-bottom:4px">P&L Statement</div>' +
+      plRow('(+) Capital from Investors', capital, 'var(--blue)') +
+      plRow('(+) Sales & Income', income, 'var(--green)') +
+      plRow('(−) Total Expenses', expense, 'var(--red)') +
+      '<div style="border-top:1.5px solid var(--border);margin:4px 0"></div>' +
+      plRow('Gross Profit / (Loss)', grossProfit, plColor, true) +
+      plRow('(−) Profit Distributed', payout, 'var(--gold)') +
+      '<div style="border-top:1.5px solid var(--border);margin:4px 0"></div>' +
+      plRow('Net Cash Balance', balance, balance>=0?'var(--green)':'var(--red)', true) +
+    '</div>' +
+    buildCatBreakdown(txns);
+
+  // ── Ledger with running balance ──
+  const sorted = [...txns].sort((a,b)=>new Date(a.transaction_date)-new Date(b.transaction_date));
+  let running = 0;
+  const rows = sorted.map(t => {
+    const isIn = t.type==='income'||t.type==='capital_in';
+    const isOut = t.type==='expense'||t.type==='profit_distribution';
+    const amt = Number(t.amount);
+    if (isIn) running += amt;
+    if (isOut) running -= amt;
+    const typeLabel = {capital_in:'Capital In', income:'Income', expense:'Expense', profit_distribution:'Profit Dist.'};
+    const typeBadge = {capital_in:'badge-blue', income:'badge-green', expense:'badge-red', profit_distribution:'badge-gold'};
+    return '<tr>' +
+      '<td class="fz11">' + fmtDate(t.transaction_date) + '</td>' +
+      '<td><span class="badge ' + (typeBadge[t.type]||'badge-gray') + '">' + (typeLabel[t.type]||t.type) + '</span></td>' +
+      '<td class="fz11">' + (t.category||'—') + '</td>' +
+      '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (t.description||'—') + '</td>' +
+      '<td class="mono fz11">' + (t.reference||'—') + '</td>' +
+      '<td class="fz11">' + (t.created_by_name||'—') + '</td>' +
+      '<td class="mono fw7 ' + (isIn?'text-green':'text-red') + '" style="text-align:right">' + (isIn?'+':'−') + fmtMoney(amt) + '</td>' +
+      '<td class="mono fz11 ' + (running>=0?'text-green':'text-red') + '" style="text-align:right">' + fmtMoney(running) + '</td>' +
+      '<td><button class="btn btn-ghost btn-sm" onclick="deleteTxn(' + t.id + ')" title="Delete">🗑</button></td>' +
+    '</tr>';
+  }).reverse(); // Show newest first in display
+
+  const body = document.getElementById('txn-body');
+  body.innerHTML = rows.length === 0
+    ? '<tr><td colspan="9"><div class="empty-state"><div class="ei">📒</div><p>No transactions yet. Click "+ Add Entry" to start.</p></div></td></tr>'
+    : rows.join('');
+
+  // Footer totals
+  document.getElementById('txn-foot').innerHTML =
+    '<tr style="font-weight:700;background:var(--bg2)">' +
+    '<td colspan="6" style="padding:10px 12px;font-size:13px">Totals (' + txns.length + ' entries)</td>' +
+    '<td class="mono" style="text-align:right;color:var(--green);padding:10px 12px">+' + fmtMoney(totalIn) + '<br><span style="color:var(--red)">−' + fmtMoney(expense+payout) + '</span></td>' +
+    '<td class="mono fw7" style="text-align:right;color:' + (balance>=0?'var(--green)':'var(--red)') + ';padding:10px 12px">' + fmtMoney(balance) + '</td>' +
+    '<td></td></tr>';
 }
+
+function plRow(label, amount, color, bold=false) {
+  return '<div style="display:flex;justify-content:space-between;align-items:center;font-size:13px' + (bold?';font-weight:700':'') + '">' +
+    '<span style="color:var(--muted)">' + label + '</span>' +
+    '<span style="color:' + color + ';font-family:monospace">' + fmtMoney(Math.abs(amount)) + '</span>' +
+  '</div>';
+}
+
+function buildCatBreakdown(txns) {
+  const expByCat = {};
+  txns.filter(t=>t.type==='expense').forEach(t => {
+    const cat = t.category || 'Other';
+    expByCat[cat] = (expByCat[cat]||0) + Number(t.amount);
+  });
+  const entries = Object.entries(expByCat).sort((a,b)=>b[1]-a[1]);
+  if (!entries.length) return '';
+  const total = entries.reduce((s,[,v])=>s+v,0);
+  const colors = ['#E24B4A','#EF9F27','#185FA5','#0F6E56','#534AB7','#D85A30','#444441','#993556'];
+  return '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 16px">' +
+    '<div style="font-weight:700;font-size:12px;color:var(--muted);letter-spacing:.5px;text-transform:uppercase;margin-bottom:10px">Expense Breakdown</div>' +
+    entries.map(([cat, amt], i) => {
+      const pct = total>0?Math.round(amt/total*100):0;
+      return '<div style="margin-bottom:8px">' +
+        '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">' +
+          '<span>' + cat + '</span><span style="color:var(--muted)">' + fmtMoney(amt) + ' (' + pct + '%)</span>' +
+        '</div>' +
+        '<div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">' +
+          '<div style="height:6px;width:' + pct + '%;background:' + (colors[i%colors.length]) + ';border-radius:3px;transition:width .4s"></div>' +
+        '</div></div>';
+    }).join('') +
+  '</div>';
+}
+
+function buildCatFilter(txns) {
+  const cats = [...new Set(txns.map(t=>t.category).filter(Boolean))].sort();
+  const sel = document.getElementById('acct-filter-cat');
+  if (sel) sel.innerHTML = '<option value="">All Categories</option>' + cats.map(c=>'<option>'+c+'</option>').join('');
+}
+
+function applyTxnFilters() {
+  const type   = document.getElementById('acct-filter-type')?.value || '';
+  const cat    = document.getElementById('acct-filter-cat')?.value || '';
+  const month  = document.getElementById('acct-filter-month')?.value || '';
+  const search = (document.getElementById('acct-filter-search')?.value || '').toLowerCase();
+  const filtered = _allTxns.filter(t => {
+    if (type && t.type !== type) return false;
+    if (cat && t.category !== cat) return false;
+    if (month && !t.transaction_date?.startsWith(month)) return false;
+    if (search && !(t.description||'').toLowerCase().includes(search) && !(t.reference||'').toLowerCase().includes(search) && !(t.category||'').toLowerCase().includes(search)) return false;
+    return true;
+  });
+  renderAccounts(filtered);
+}
+
+function clearTxnFilters() {
+  ['acct-filter-type','acct-filter-cat','acct-filter-month','acct-filter-search'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  renderAccounts(_allTxns);
+}
+
+function exportTxnCSV() {
+  const type   = document.getElementById('acct-filter-type')?.value || '';
+  const cat    = document.getElementById('acct-filter-cat')?.value || '';
+  const month  = document.getElementById('acct-filter-month')?.value || '';
+  const search = (document.getElementById('acct-filter-search')?.value || '').toLowerCase();
+  const rows = _allTxns.filter(t => {
+    if (type && t.type !== type) return false;
+    if (cat && t.category !== cat) return false;
+    if (month && !t.transaction_date?.startsWith(month)) return false;
+    if (search && !(t.description||'').toLowerCase().includes(search) && !(t.reference||'').toLowerCase().includes(search)) return false;
+    return true;
+  });
+  const header = ['Date','Type','Category','Description','Reference','Amount','By'];
+  const lines = [header.join(','), ...rows.sort((a,b)=>new Date(a.transaction_date)-new Date(b.transaction_date)).map(t =>
+    [t.transaction_date, t.type, t.category||'', '"'+(t.description||'')+'"', t.reference||'', t.amount, t.created_by_name||''].join(',')
+  )];
+  const blob = new Blob([lines.join('\n')], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (currentProject?.name||'project') + '-accounts.csv';
+  a.click();
+}
+
+async function saveTxn() {
+  const amt = v('tf-amount');
+  const dt  = v('tf-date');
+  const tp  = v('tf-type');
+  if (!amt || !dt || !tp) return toast('Amount, date and type are required','error');
+  const body = { type: tp, category: v('tf-cat'), amount: amt, description: v('tf-desc'), transaction_date: dt, reference: v('tf-ref') };
+  try {
+    await api('POST', `/projects/${currentProject.id}/transactions`, body);
+    toast('Entry added');
+    closeModal();
+    loadProjectAccounts(currentProject.id);
+    loadProjectSummary(currentProject.id);
+  } catch (e) { toast(e.message,'error'); }
+}
+
 async function deleteTxn(id) {
-  if (!confirm('Delete this transaction?')) return;
-  try { await api('DELETE', `/transactions/${id}`); toast('Deleted'); loadProjectAccounts(currentProject.id); }
-  catch (e) { toast(e.message,'error'); }
+  if (!confirm('Delete this transaction? This cannot be undone.')) return;
+  try {
+    await api('DELETE', `/transactions/${id}`);
+    toast('Deleted');
+    _allTxns = _allTxns.filter(t=>t.id!==id);
+    renderAccounts(_allTxns);
+    loadProjectSummary(currentProject.id);
+  } catch (e) { toast(e.message,'error'); }
 }
 
 // ════════════════════════════════════════
