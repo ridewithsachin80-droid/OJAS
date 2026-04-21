@@ -1,8 +1,48 @@
 const nodemailer = require('nodemailer');
+const https = require('https');
 
 // ─────────────────────────────────────────
-// EMAIL (Nodemailer — Gmail or SMTP)
+// EMAIL — tries Resend API first, falls back to SMTP
+// Set RESEND_API_KEY for reliable cloud delivery (resend.com — free 3k/mo)
+// Set EMAIL_USER + EMAIL_PASS for SMTP fallback
 // ─────────────────────────────────────────
+
+// Resend API (uses HTTPS port 443 — works on Railway/Heroku/all clouds)
+async function sendViaResend({ to, subject, html, text }) {
+  return new Promise((resolve, reject) => {
+    const fromName = process.env.EMAIL_FROM_NAME || 'InvestTrack';
+    const fromAddr = process.env.RESEND_FROM || 'noreply@yourdomain.com';
+    const payload = JSON.stringify({
+      from: `${fromName} <${fromAddr}>`,
+      to: [to], subject,
+      html: html || `<p>${text}</p>`,
+      text: text || ''
+    });
+    const req = https.request({
+      hostname: 'api.resend.com',
+      path: '/emails',
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload)
+      }
+    }, res => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) resolve(true);
+        else reject(new Error(`Resend API ${res.statusCode}: ${data}`));
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(10000, () => { req.destroy(); reject(new Error('Resend timeout')); });
+    req.write(payload);
+    req.end();
+  });
+}
+
+// SMTP fallback (nodemailer — may be blocked by some cloud providers)
 function getMailer() {
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) return null;
   return nodemailer.createTransport({
@@ -10,23 +50,39 @@ function getMailer() {
     port: parseInt(process.env.EMAIL_PORT || '587'),
     secure: process.env.EMAIL_SECURE === 'true',
     auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
-    tls: { rejectUnauthorized: false }
+    tls: { rejectUnauthorized: false },
+    connectionTimeout: 8000,
+    greetingTimeout: 8000,
+    socketTimeout: 8000
   });
 }
 
 async function sendEmail({ to, subject, html, text }) {
+  if (!to) { console.log('[Email] No recipient — skipping'); return false; }
+
+  // Try Resend first if configured
+  if (process.env.RESEND_API_KEY) {
+    try {
+      await sendViaResend({ to, subject, html, text });
+      console.log(`[Email/Resend] Sent to ${to}: ${subject}`);
+      return true;
+    } catch (e) {
+      console.error('[Email/Resend] Failed:', e.message, '— trying SMTP fallback');
+    }
+  }
+
+  // Fall back to SMTP
   const mailer = getMailer();
   if (!mailer) { console.log('[Email] Not configured — skipping:', subject); return false; }
-  if (!to) { console.log('[Email] No recipient — skipping'); return false; }
   try {
     await mailer.sendMail({
       from: `"${process.env.EMAIL_FROM_NAME || 'InvestTrack'}" <${process.env.EMAIL_USER}>`,
       to, subject, html, text
     });
-    console.log(`[Email] Sent to ${to}: ${subject}`);
+    console.log(`[Email/SMTP] Sent to ${to}: ${subject}`);
     return true;
   } catch (e) {
-    console.error('[Email] Failed:', e.message);
+    console.error('[Email/SMTP] Failed:', e.message);
     return false;
   }
 }
