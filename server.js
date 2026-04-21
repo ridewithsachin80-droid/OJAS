@@ -131,28 +131,64 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     if (requireDevice) {
-      // New/unknown device — send OTP before granting access
+      // Check if any delivery channel is configured on this server
+      const emailConfigured = !!(process.env.EMAIL_USER && process.env.EMAIL_PASS);
+      const waConfigured = !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN);
+      const canDeliver = (emailConfigured && user.email) || (waConfigured && user.mobile);
+
+      if (!canDeliver) {
+        // No delivery channel configured — auto-trust this device and warn in logs
+        console.warn(`⚠️  [DEVICE TRUST] No OTP delivery channel configured. Auto-trusting device for user: ${user.email}. Configure EMAIL_USER/EMAIL_PASS or Twilio env vars to enforce OTP.`);
+        const deviceTokenAuto = crypto.randomBytes(48).toString('hex');
+        const ua = req.headers['user-agent'] || '';
+        await pool.query(
+          'INSERT INTO trusted_devices (user_id, device_token, device_label) VALUES ($1,$2,$3)',
+          [user.id, deviceTokenAuto, deviceLabel(ua)]
+        );
+        return res.json({
+          token,
+          device_token: deviceTokenAuto,
+          user: { id: user.id, email: user.email, role: user.role, name: user.full_name },
+          device_trusted: true,
+          warning: 'Device auto-trusted: no OTP delivery channel configured. Set up email or WhatsApp in Settings.'
+        });
+      }
+
+      // Delivery channel exists — generate and send OTP
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
-      await pool.query('DELETE FROM device_otps WHERE user_id=$1', [user.id]); // clear old OTPs
+      await pool.query('DELETE FROM device_otps WHERE user_id=$1', [user.id]);
       await pool.query(
         'INSERT INTO device_otps (user_id, otp_code, expires_at) VALUES ($1,$2,NOW()+INTERVAL \'10 minutes\')',
         [user.id, otp]
       );
-      // Send OTP via email/whatsapp
+
+      // Always log to server console as fallback (visible in Railway logs)
+      console.log(`🔐 [OTP] User: ${user.email} | Code: ${otp} | Expires: 10 min`);
+
       const { sendEmail, sendWhatsApp } = require('./notifications');
       const otpMsg = `Your InvestTrack device verification code is: *${otp}*\n\nThis code expires in 10 minutes. Do not share it with anyone.`;
-      if (user.email) {
-        sendEmail({ to: user.email, subject: 'InvestTrack — Device Verification Code',
-          html: `<div style="font-family:sans-serif;max-width:480px;margin:auto"><h2 style="color:#0F1E3D">Device Verification</h2><p>Someone is trying to log in to InvestTrack from a new device.</p><div style="font-size:32px;font-weight:bold;letter-spacing:8px;text-align:center;padding:20px;background:#F8FAFC;border-radius:8px;color:#0F1E3D">${otp}</div><p style="color:#666;font-size:13px">This code expires in 10 minutes. If this wasn't you, your password may be compromised.</p></div>`,
-          text: otpMsg
-        }).catch(e => console.error('OTP email error:', e.message));
+      let deliveryNote = '';
+
+      if (emailConfigured && user.email) {
+        try {
+          await sendEmail({ to: user.email, subject: 'InvestTrack — Device Verification Code',
+            html: `<div style="font-family:sans-serif;max-width:480px;margin:auto"><h2 style="color:#0F1E3D">Device Verification</h2><p>Someone is trying to log in to InvestTrack from a new device.</p><div style="font-size:32px;font-weight:bold;letter-spacing:8px;text-align:center;padding:20px;background:#F8FAFC;border-radius:8px;color:#0F1E3D">${otp}</div><p style="color:#666;font-size:13px">This code expires in 10 minutes. If this wasn't you, your password may be compromised.</p></div>`,
+            text: otpMsg
+          });
+          deliveryNote = `OTP sent to ${user.email}`;
+        } catch(e) {
+          console.error('OTP email error:', e.message);
+          deliveryNote = 'Email delivery failed. Check Railway logs for OTP code.';
+        }
       }
-      if (user.mobile) {
+
+      if (waConfigured && user.mobile) {
         sendWhatsApp(user.mobile, otpMsg).catch(e => console.error('OTP WA error:', e.message));
+        if (!deliveryNote) deliveryNote = `OTP sent to ${user.mobile}`;
       }
-      // Return partial auth with otp_required flag (temp token for OTP step only)
+
       const tempToken = jwt.sign({ id: user.id, otp_step: true }, JWT_SECRET, { expiresIn: '15m' });
-      return res.status(202).json({ otp_required: true, temp_token: tempToken, message: 'OTP sent to your registered email/mobile.' });
+      return res.status(202).json({ otp_required: true, temp_token: tempToken, message: deliveryNote || 'OTP sent.' });
     }
 
     // Device trust not required (REQUIRE_DEVICE_TRUST=false)

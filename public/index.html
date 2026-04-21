@@ -611,6 +611,12 @@ async function doLogin() {
     if (!data.ok) throw new Error(json.error || 'Login failed');
     token = json.token;
     currentUser = json.user;
+    // If server auto-trusted this device (no OTP channels configured), store the device token
+    if (json.device_token) {
+      deviceToken = json.device_token;
+      localStorage.setItem('it_device', deviceToken);
+    }
+    if (json.warning) toast('⚠️ ' + json.warning, 'error');
     sessionStorage.setItem('it_token', token);
     sessionStorage.setItem('it_user', JSON.stringify(currentUser));
     bootApp();
