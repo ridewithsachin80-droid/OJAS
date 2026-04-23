@@ -202,6 +202,12 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     // Device trust not required (REQUIRE_DEVICE_TRUST=false)
+    // Auto-link any unlinked investments matching this email
+    pool.query(
+      'UPDATE investments SET user_id=$1 WHERE user_id IS NULL AND (email=$2 OR mobile=$3)',
+      [user.id, user.email, user.mobile||'']
+    ).catch(e => console.error('Auto-link investments error:', e.message));
+
     res.json({ token, user: { id: user.id, email: user.email, role: user.role, name: user.full_name }, device_trusted: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -593,11 +599,19 @@ app.post('/api/investments/:id/payments', auth('admin'), async (req, res) => {
 
 app.delete('/api/investments/:id/payments/:pid', auth('admin'), async (req, res) => {
   try {
-    const pmtR = await pool.query('SELECT * FROM investor_payments WHERE id=$1 AND investment_id=$2', [req.params.pid, req.params.id]);
+    const pmtR = await pool.query(
+      'SELECT ip.*,i.project_id,i.investor_code FROM investor_payments ip JOIN investments i ON i.id=ip.investment_id WHERE ip.id=$1 AND ip.investment_id=$2',
+      [req.params.pid, req.params.id]
+    );
     if (!pmtR.rows.length) return res.status(404).json({ error: 'Payment not found' });
     const pmt = pmtR.rows[0];
     await pool.query('DELETE FROM investor_payments WHERE id=$1', [req.params.pid]);
     await pool.query('UPDATE investments SET amount=GREATEST(0,amount-$1),updated_at=NOW() WHERE id=$2', [pmt.amount, req.params.id]);
+    // Also remove the capital_in transaction that was created for this payment
+    await pool.query(
+      "DELETE FROM transactions WHERE project_id=$1 AND type='capital_in' AND amount=$2 AND description LIKE $3",
+      [pmt.project_id, pmt.amount, `%${pmt.investor_code}%`]
+    );
     res.json({ message: 'Payment deleted' });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -637,9 +651,18 @@ app.post('/api/investments/:id/returns', auth('admin'), async (req, res) => {
 
 app.delete('/api/investments/:id/returns/:rid', auth('admin'), async (req, res) => {
   try {
-    const rR = await pool.query('SELECT * FROM investor_returns WHERE id=$1 AND investment_id=$2', [req.params.rid, req.params.id]);
+    const rR = await pool.query(
+      'SELECT ir.*,i.project_id,i.investor_code FROM investor_returns ir JOIN investments i ON i.id=ir.investment_id WHERE ir.id=$1 AND ir.investment_id=$2',
+      [req.params.rid, req.params.id]
+    );
     if (!rR.rows.length) return res.status(404).json({ error: 'Return not found' });
+    const ret = rR.rows[0];
     await pool.query('DELETE FROM investor_returns WHERE id=$1', [req.params.rid]);
+    // Also remove the profit_distribution transaction that was created for this return
+    await pool.query(
+      "DELETE FROM transactions WHERE project_id=$1 AND type='profit_distribution' AND amount=$2 AND description LIKE $3",
+      [ret.project_id, ret.amount, `%${ret.investor_code}%`]
+    );
     res.json({ message: 'Return deleted' });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -664,13 +687,57 @@ app.get('/api/investments/:id/statement', auth('admin'), async (req, res) => {
 });
 
 app.put('/api/investments/:id', auth('admin'), async (req, res) => {
-  const { kyc_status, full_name, parent_name, pan, aadhaar, mobile, email, address, bank_acc, bank_name, ifsc, notes, agreement_signed } = req.body;
+  const { user_id, user_email, kyc_status, full_name, parent_name, pan, aadhaar, mobile, email, address, bank_acc, bank_name, ifsc, notes, agreement_signed } = req.body;
   try {
+    // Resolve user_id by email if provided
+    let resolvedUserId = user_id || null;
+    if (!resolvedUserId && user_email) {
+      const ur = await pool.query('SELECT id FROM users WHERE email=$1', [user_email.toLowerCase()]);
+      if (ur.rows.length) resolvedUserId = ur.rows[0].id;
+    }
     await pool.query(
-      `UPDATE investments SET kyc_status=$1,full_name=$2,parent_name=$3,pan=$4,aadhaar=$5,mobile=$6,email=$7,address=$8,bank_acc=$9,bank_name=$10,ifsc=$11,notes=$12,agreement_signed=$13,updated_at=NOW() WHERE id=$14`,
-      [kyc_status||'pending', full_name||null, parent_name||null, pan||null, aadhaar||null, mobile||null, email||null, address||null, bank_acc||null, bank_name||null, ifsc||null, notes||null, agreement_signed||false, req.params.id]
+      `UPDATE investments SET user_id=$1,kyc_status=$2,full_name=$3,parent_name=$4,pan=$5,aadhaar=$6,mobile=$7,email=$8,address=$9,bank_acc=$10,bank_name=$11,ifsc=$12,notes=$13,agreement_signed=$14,updated_at=NOW() WHERE id=$15`,
+      [resolvedUserId, kyc_status||'pending', full_name||null, parent_name||null, pan||null, aadhaar||null, mobile||null, email||null, address||null, bank_acc||null, bank_name||null, ifsc||null, notes||null, agreement_signed||false, req.params.id]
     );
     res.json({ message: 'Investor updated' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Admin: cleanup orphaned transactions (transactions without matching investor_payment/return) ──
+app.post('/api/admin/cleanup-transactions', auth('admin'), async (req, res) => {
+  try {
+    // Find capital_in transactions with "Payment from" that no longer have a corresponding payment
+    const result = await pool.query(`
+      DELETE FROM transactions t
+      WHERE t.type = 'capital_in'
+        AND t.description LIKE 'Payment from%'
+        AND NOT EXISTS (
+          SELECT 1 FROM investor_payments ip
+          JOIN investments i ON i.id = ip.investment_id
+          WHERE t.project_id = i.project_id
+            AND t.amount = ip.amount
+            AND t.description LIKE CONCAT('%', i.investor_code, '%')
+        )
+      RETURNING id, description, amount
+    `);
+    res.json({ message: "Cleaned up " + result.rowCount + " orphaned transaction(s)", removed: result.rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Admin: bulk-link investments to user accounts by email/mobile ──
+app.post('/api/admin/link-investments', auth('admin'), async (req, res) => {
+  try {
+    // For each user, link any investment where email or mobile matches
+    const users = await pool.query("SELECT id,email,mobile FROM users WHERE role='investor'");
+    let linked = 0;
+    for (const u of users.rows) {
+      const r = await pool.query(
+        'UPDATE investments SET user_id=$1 WHERE user_id IS NULL AND (email=$2 OR mobile=$3) RETURNING id',
+        [u.id, u.email, u.mobile||'']
+      );
+      linked += r.rowCount;
+    }
+    res.json({ message: `Linked ${linked} investment(s) to user accounts` });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

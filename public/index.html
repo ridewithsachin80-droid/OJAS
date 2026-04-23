@@ -331,7 +331,10 @@ table.dt tr:hover td{background:#FAFBFF}
         <div id="pt-investors" class="ptab-content" style="display:none">
           <div class="flex-between mb-12" style="margin-bottom:12px">
             <div class="card-title">Investor Register</div>
-            <button class="btn btn-primary btn-sm" onclick="openModal('investment-form')">+ Add Investor</button>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-outline btn-sm" onclick="autoLinkInvestors()" title="Match investments to user accounts by email">🔗 Link Accounts</button>
+              <button class="btn btn-primary btn-sm" onclick="openModal('investment-form')">+ Add Investor</button>
+            </div>
           </div>
           <div class="card"><div class="tbl-wrap"><table class="dt" id="inv-table"><thead><tr><th>ID</th><th>Name</th><th>PAN</th><th>Total Invested (₹)</th><th>Pool Share</th><th>Profit Entitlement</th><th>Date</th><th>KYC</th><th>Login</th><th>Ledger</th><th>Actions</th></tr></thead><tbody id="inv-body"></tbody></table></div></div>
         </div>
@@ -339,7 +342,10 @@ table.dt tr:hover td{background:#FAFBFF}
         <div id="pt-accounts" class="ptab-content" style="display:none">
           <div class="flex-between" style="margin-bottom:12px">
             <div class="card-title">Accounts & Transactions</div>
-            <button class="btn btn-primary btn-sm" onclick="openModal('txn-form')">+ Add Entry</button>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-outline btn-sm" onclick="cleanupOrphanedTxns()" title="Remove stale transactions from deleted payments/returns">🧹 Cleanup</button>
+              <button class="btn btn-primary btn-sm" onclick="openModal('txn-form')">+ Add Entry</button>
+            </div>
           </div>
           <div class="stat-grid" id="acct-stats"></div>
           <div id="acct-pl" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:16px"></div>
@@ -986,7 +992,7 @@ async function loadProjectInvestors(pid) {
           '<td><span class="badge badge-gold">' + profEnt + '%</span></td>' +
           '<td class="fz11">' + fmtDate(inv.investment_date) + '</td>' +
           '<td><span class="badge ' + kycBadge + '">' + kycLabel + '</span></td>' +
-          '<td><span class="badge ' + (inv.user_id?'badge-green':'badge-gray') + '">' + (inv.user_id?'✓':'—') + '</span></td>' +
+          '<td><span class="badge ' + (inv.user_id?'badge-green':'badge-gray') + '" title="' + (inv.user_id?'Linked to user account':'Not linked - edit investor to link') + '">' + (inv.user_id?'✓ Linked':'Link') + '</span></td>' +
           '<td><button class="btn btn-ghost btn-sm" onclick="openPaymentsModal(' + inv.id + ')">💰 Ledger</button></td>' +
           '<td style="white-space:nowrap">' +
             '<button class="btn btn-ghost btn-sm" onclick="editInvestor(' + inv.id + ')">✏️</button>' +
@@ -999,6 +1005,15 @@ async function loadProjectInvestors(pid) {
 }
 
 function editInvestor(id) { const inv = window._investorsMap[id]; if (inv) openModal('investment-edit', inv); }
+
+async function autoLinkInvestors() {
+  try {
+    const r = await api('POST', '/admin/link-investments');
+    if (!r) return;
+    toast(r.message || 'Done');
+    loadProjectInvestors(currentProject.id);
+  } catch(e) { toast(e.message, 'error'); }
+}
 function viewCert(id) { const inv = window._investorsMap[id]; if (inv) genCertificate(inv); }
 async function saveInvestment(id) {
   let userId = null;
@@ -1007,7 +1022,7 @@ async function saveInvestment(id) {
     try { const users = await api('GET','/users'); const u = users.find(u=>u.email===userEmail); if(u) userId=u.id; } catch(_) {}
   }
   const body = {
-    user_id: userId, full_name: v('if-name'), kyc_status: v('if-kyc'), parent_name: v('if-parent'),
+    user_id: userId, user_email: userEmail||null, full_name: v('if-name'), kyc_status: v('if-kyc'), parent_name: v('if-parent'),
     pan: v('if-pan')?.toUpperCase(), aadhaar: v('if-aadhaar'), mobile: v('if-mobile'),
     email: v('if-email'), address: v('if-address'), bank_acc: v('if-bankacc'),
     bank_name: v('if-bankname'), ifsc: v('if-ifsc'), notes: v('if-notes'),
@@ -1347,6 +1362,17 @@ function clearTxnFilters() {
     var el = document.getElementById(id); if(el) el.value='';
   });
   renderAccounts(_allTxns);
+}
+
+async function cleanupOrphanedTxns() {
+  if (!confirm('This will remove stale capital_in transactions that were created by payments which have since been deleted. Continue?')) return;
+  try {
+    const r = await api('POST', '/admin/cleanup-transactions');
+    if (!r) return;
+    toast(r.message);
+    loadProjectAccounts(currentProject.id);
+    loadProjectSummary(currentProject.id);
+  } catch(e) { toast(e.message, 'error'); }
 }
 
 function exportTxnCSV() {
