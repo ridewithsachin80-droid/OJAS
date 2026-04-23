@@ -440,6 +440,52 @@ app.put('/api/projects/:id', auth('admin'), async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── Delete Project (cascade deletes all related data) ──
+app.delete('/api/projects/:id', auth('admin'), async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const pid = req.params.id;
+    // Verify it exists
+    const pr = await client.query('SELECT name FROM projects WHERE id=$1', [pid]);
+    if (!pr.rows.length) return res.status(404).json({ error: 'Project not found' });
+    // Delete in dependency order
+    await client.query('DELETE FROM site_sale_documents WHERE sale_id IN (SELECT id FROM site_sales WHERE project_id=$1)', [pid]);
+    await client.query('DELETE FROM site_sales WHERE project_id=$1', [pid]);
+    await client.query('DELETE FROM stage_photos WHERE stage_id IN (SELECT id FROM stage_updates WHERE project_id=$1)', [pid]);
+    await client.query('DELETE FROM stage_updates WHERE project_id=$1', [pid]);
+    await client.query('DELETE FROM documents WHERE project_id=$1', [pid]);
+    await client.query('DELETE FROM transactions WHERE project_id=$1', [pid]);
+    await client.query('DELETE FROM milestones WHERE project_id=$1', [pid]);
+    await client.query('DELETE FROM investor_returns WHERE investment_id IN (SELECT id FROM investments WHERE project_id=$1)', [pid]);
+    await client.query('DELETE FROM investor_payments WHERE investment_id IN (SELECT id FROM investments WHERE project_id=$1)', [pid]);
+    await client.query('DELETE FROM investments WHERE project_id=$1', [pid]);
+    await client.query('DELETE FROM projects WHERE id=$1', [pid]);
+    await client.query('COMMIT');
+    res.json({ message: `Project "${pr.rows[0].name}" deleted successfully` });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: e.message });
+  } finally { client.release(); }
+});
+
+// ── Delete User ──
+app.delete('/api/users/:id', auth('admin'), async (req, res) => {
+  try {
+    const uid = parseInt(req.params.id);
+    if (uid === req.user.id) return res.status(400).json({ error: 'You cannot delete your own account' });
+    const ur = await pool.query('SELECT full_name,role FROM users WHERE id=$1', [uid]);
+    if (!ur.rows.length) return res.status(404).json({ error: 'User not found' });
+    if (ur.rows[0].role === 'admin') return res.status(400).json({ error: 'Cannot delete admin accounts' });
+    // Unlink their investments (don't delete, just unlink)
+    await pool.query('UPDATE investments SET user_id=NULL WHERE user_id=$1', [uid]);
+    // Revoke all devices
+    await pool.query('DELETE FROM trusted_devices WHERE user_id=$1', [uid]);
+    await pool.query('DELETE FROM users WHERE id=$1', [uid]);
+    res.json({ message: `User "${ur.rows[0].full_name}" deleted` });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ══════════════════════════════════════════
 // MILESTONES
 // ══════════════════════════════════════════

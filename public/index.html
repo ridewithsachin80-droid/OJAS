@@ -304,7 +304,8 @@ table.dt tr:hover td{background:#FAFBFF}
           </div>
           <div class="page-hd-right">
             <button class="btn btn-outline btn-sm" onclick="showSection('overview')">← All Projects</button>
-            <button class="btn btn-ghost btn-sm" onclick="openModal('project-edit')">Edit Project</button>
+            <button class="btn btn-ghost btn-sm" onclick="openModal('project-edit')">✏️ Edit Project</button>
+            <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="deleteProject()">🗑 Delete Project</button>
           </div>
         </div>
         <!-- Project sub-tabs -->
@@ -913,6 +914,35 @@ function projectFormHTML(p) {
     <button class="btn btn-primary" onclick="saveProject(${p?.id||null})">${p?'Update':'Create'} Project</button>
     <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
   </div>`;
+}
+
+async function deleteProject() {
+  const name = currentProject?.name || 'this project';
+  if (!confirm('⚠️ Permanently delete "' + name + '"?\n\nThis will delete ALL investors, payments, returns, transactions, documents, stage updates, and site sales.\n\nType DELETE to confirm.') ) return;
+  const confirm2 = prompt('Type DELETE to confirm permanently deleting "' + name + '":');
+  if (confirm2 !== 'DELETE') { toast('Deletion cancelled'); return; }
+  try {
+    const r = await api('DELETE', '/projects/' + currentProject.id);
+    if (!r) return;
+    toast(r.message || 'Project deleted');
+    currentProject = null;
+    showSection('overview');
+    loadProjects();
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+function editUserById(id) { const u = window._usersMap?.[id]; if (u) openModal('user-form', u); }
+
+async function deleteUser(id) {
+  const u = window._usersMap?.[id];
+  const name = u?.full_name || 'this user';
+  if (!confirm('Delete user "' + name + '"?\n\nTheir investment records will be kept but unlinked from this account.')) return;
+  try {
+    const r = await api('DELETE', '/users/' + id);
+    if (!r) return;
+    toast(r.message || 'User deleted');
+    loadUsers();
+  } catch(e) { toast(e.message, 'error'); }
 }
 
 async function saveProject(id) {
@@ -1800,6 +1830,9 @@ function userFormHTML(u) {
 
 async function loadUsers() {
   const users = await api('GET','/users');
+  if (!users) return;
+  window._usersMap = {};
+  users.forEach(u => window._usersMap[u.id] = u);
   document.getElementById('users-body').innerHTML = users.map(u => `<tr>
     <td><strong>${u.full_name}</strong></td>
     <td class="mono fz11">${u.email}</td>
@@ -1808,7 +1841,10 @@ async function loadUsers() {
     <td class="fz11">${u.mobile||'—'}</td>
     <td><span class="badge ${u.is_active?'badge-green':'badge-red'}">${u.is_active?'Active':'Disabled'}</span></td>
     <td class="fz11">${fmtDate(u.created_at)}</td>
-    <td><button class="btn btn-ghost btn-sm" onclick='openModal("user-form",${JSON.stringify(u)})'>✏️ Edit</button></td>
+    <td style="white-space:nowrap">
+      <button class="btn btn-ghost btn-sm" onclick="editUserById(${u.id})">✏️ Edit</button>
+      ${u.role !== 'admin' ? `<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="deleteUser(${u.id})">🗑 Del</button>` : ''}
+    </td>
   </tr>`).join('');
 }
 
