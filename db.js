@@ -193,6 +193,24 @@ CREATE TABLE IF NOT EXISTS investor_returns (
   created_at TIMESTAMP DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_investor_returns_investment ON investor_returns(investment_id);
+-- Land Owner Advances (Joint Venture - Recoverable)
+CREATE TABLE IF NOT EXISTS land_advances (
+  id SERIAL PRIMARY KEY,
+  project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+  land_owner VARCHAR(255) NOT NULL,
+  description TEXT,
+  paid_amount BIGINT NOT NULL DEFAULT 0,
+  paid_date DATE,
+  recovered_amount BIGINT NOT NULL DEFAULT 0,
+  recovered_date DATE,
+  status VARCHAR(20) DEFAULT 'outstanding',
+  notes TEXT,
+  created_by INTEGER REFERENCES users(id),
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_land_advances_project ON land_advances(project_id);
+
 
 
 -- Create indexes

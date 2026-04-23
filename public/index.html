@@ -317,6 +317,7 @@ table.dt tr:hover td{background:#FAFBFF}
           <button class="ptab" data-tab="pt-documents" onclick="switchPTab(this,'pt-documents')">Documents</button>
           <button class="ptab" data-tab="pt-stages" onclick="switchPTab(this,'pt-stages')">Stage Updates</button>
           <button class="ptab" data-tab="pt-sales" onclick="switchPTab(this,'pt-sales')">Site Sales</button>
+          <button class="ptab" data-tab="pt-advances" onclick="switchPTab(this,'pt-advances')">🤝 Advances</button>
           <button class="ptab" data-tab="pt-report" onclick="switchPTab(this,'pt-report')">Report</button>
         </div>
         <style>.ptab{background:none;border:none;padding:8px 14px;cursor:pointer;font-family:Sora,sans-serif;font-size:12px;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap}.ptab.active{color:var(--navy);border-bottom-color:var(--navy);font-weight:700}</style>
@@ -400,6 +401,23 @@ table.dt tr:hover td{background:#FAFBFF}
           </div>
           <div class="stat-grid" id="sales-stats"></div>
           <div class="card"><div class="tbl-wrap"><table class="dt" id="sales-table"><thead><tr><th>Plot</th><th>Customer</th><th>PAN</th><th>Amount (₹)</th><th>Sale Date</th><th>Doc No.</th><th>Documents</th><th>Actions</th></tr></thead><tbody id="sales-body"></tbody></table></div></div>
+        </div>
+
+        <div id="pt-advances" class="ptab-content" style="display:none">
+          <div class="card-hd">
+            <div class="card-title">🤝 Land Owner Advances (Joint Venture)</div>
+            <button class="btn btn-primary btn-sm" onclick="openModal('advance-form')">+ Record Advance</button>
+          </div>
+          <div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#92400E">
+            <strong>📌 What is this?</strong> Money paid to the land owner as advance for a Joint Venture agreement. This is <strong>recoverable</strong> — the land owner returns it after project completion. It reduces your cash balance but does <strong>NOT</strong> affect Net Profit.
+          </div>
+          <div id="advances-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:16px"></div>
+          <div class="card"><div class="tbl-wrap">
+            <table class="data-table">
+              <thead><tr><th>Land Owner</th><th>Description</th><th>Paid Date</th><th>Paid Amount</th><th>Recovered</th><th>Outstanding</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody id="advances-body"></tbody>
+            </table>
+          </div></div>
         </div>
 
         <div id="pt-report" class="ptab-content" style="display:none">
@@ -758,7 +776,7 @@ function switchPTab(btn, id) {
   btn.classList.add('active');
   document.querySelectorAll('.ptab-content').forEach(c => c.style.display = 'none');
   document.getElementById(id).style.display = 'block';
-  const loaders = { 'pt-investors': loadProjectInvestors, 'pt-accounts': loadProjectAccounts, 'pt-milestones': loadMilestones, 'pt-documents': loadDocuments, 'pt-stages': loadStages, 'pt-sales': loadSales, 'pt-report': loadProjectReport };
+  const loaders = { 'pt-investors': loadProjectInvestors, 'pt-accounts': loadProjectAccounts, 'pt-milestones': loadMilestones, 'pt-documents': loadDocuments, 'pt-stages': loadStages, 'pt-sales': loadSales, 'pt-advances': loadAdvances, 'pt-report': loadProjectReport };
   if (loaders[id] && currentProject) loaders[id](currentProject.id);
 }
 
@@ -789,6 +807,8 @@ function openModal(type, data) {
   else if (type === 'doc-upload') inner.innerHTML = docUploadHTML();
   else if (type === 'stage-form') inner.innerHTML = stageFormHTML();
   else if (type === 'sale-form') inner.innerHTML = saleFormHTML();
+  else if (type === 'advance-form') inner.innerHTML = advanceFormHTML();
+  else if (type === 'advance-recover') inner.innerHTML = advanceRecoverHTML(data);
   else if (type === 'user-form') inner.innerHTML = userFormHTML(data);
   else if (type === 'milestone-edit') inner.innerHTML = milestoneFormHTML(data);
   else if (type === 'photo-view') inner.innerHTML = photoViewHTML(data);
@@ -1694,6 +1714,130 @@ async function loadSales(pid) {
 // ════════════════════════════════════════
 // REPORTS
 // ════════════════════════════════════════
+// ══════════════════════════════════════════
+// LAND OWNER ADVANCES
+// ══════════════════════════════════════════
+function advanceFormHTML() {
+  return '<div class="modal-title">Record Land Owner Advance<button class="modal-close" onclick="closeModal()">×</button></div>' +
+  '<div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:#92400E">' +
+    'This records money paid to the land owner as advance for the JV agreement. It is <strong>recoverable</strong> and will be tracked separately from expenses.' +
+  '</div>' +
+  '<div class="form-grid">' +
+    '<div class="fg"><label>Land Owner Name *</label><input id="adv-owner" placeholder="e.g. Ramaiah B.S."/></div>' +
+    '<div class="fg"><label>Amount Paid (₹) *</label><input type="number" id="adv-amount" placeholder="e.g. 5000000"/></div>' +
+    '<div class="fg"><label>Date of Payment *</label><input type="date" id="adv-date"/></div>' +
+    '<div class="fg"><label>Description</label><input id="adv-desc" placeholder="e.g. JV advance as per agreement dated..."/></div>' +
+    '<div class="fg full"><label>Notes / Agreement Reference</label><textarea id="adv-notes" rows="2" placeholder="Agreement number, terms, etc."></textarea></div>' +
+  '</div>' +
+  '<div class="form-actions">' +
+    '<button class="btn btn-primary" onclick="saveAdvance()">Record Advance</button>' +
+    '<button class="btn btn-outline" onclick="closeModal()">Cancel</button>' +
+  '</div>';
+}
+
+function advanceRecoverHTML(adv) {
+  const outstanding = Number(adv.paid_amount) - Number(adv.recovered_amount);
+  return '<div class="modal-title">Record Recovery — ' + adv.land_owner + '<button class="modal-close" onclick="closeModal()">×</button></div>' +
+  '<div style="background:#F0FFF4;border:1px solid #86EFAC;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:#166534">' +
+    'Total Paid: <strong>' + fmtMoney(adv.paid_amount) + '</strong> · Already Recovered: <strong>' + fmtMoney(adv.recovered_amount) + '</strong> · <strong>Outstanding: ' + fmtMoney(outstanding) + '</strong>' +
+  '</div>' +
+  '<div class="form-grid">' +
+    '<div class="fg"><label>Amount Recovered (₹) *</label><input type="number" id="rec-amount" placeholder="' + outstanding + '" max="' + outstanding + '"/></div>' +
+    '<div class="fg"><label>Date of Recovery *</label><input type="date" id="rec-date"/></div>' +
+    '<div class="fg full"><label>Notes</label><input id="rec-notes" placeholder="How it was received (bank transfer, cheque, etc.)"/></div>' +
+  '</div>' +
+  '<div class="form-actions">' +
+    '<button class="btn btn-primary" style="background:var(--green)" onclick="recordRecovery(' + adv.id + ')">Record Recovery</button>' +
+    '<button class="btn btn-outline" onclick="closeModal()">Cancel</button>' +
+  '</div>';
+}
+
+var _advancesMap = {};
+function recoverAdvance(id) {
+  const a = _advancesMap[id];
+  if (a) openModal('advance-recover', a);
+}
+
+async function saveAdvance() {
+  const owner = v('adv-owner'), amount = v('adv-amount'), date = v('adv-date');
+  if (!owner || !amount || !date) { toast('Land owner, amount and date are required', 'error'); return; }
+  try {
+    await api('POST', '/projects/' + currentProject.id + '/advances', {
+      land_owner: owner, paid_amount: amount, paid_date: date,
+      description: v('adv-desc'), notes: v('adv-notes')
+    });
+    toast('Advance recorded');
+    closeModal();
+    loadAdvances(currentProject.id);
+    loadProjectSummary(currentProject.id);
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function recordRecovery(advId) {
+  const amount = v('rec-amount'), date = v('rec-date');
+  if (!amount || !date) { toast('Amount and date are required', 'error'); return; }
+  try {
+    const r = await api('PUT', '/advances/' + advId + '/recover', {
+      recovered_amount: amount, recovered_date: date, notes: v('rec-notes')
+    });
+    toast('Recovery recorded — ' + (r?.status === 'fully_recovered' ? '✅ Fully recovered!' : 'Partially recovered'));
+    closeModal();
+    loadAdvances(currentProject.id);
+    loadProjectSummary(currentProject.id);
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function deleteAdvance(id) {
+  if (!confirm('Delete this advance record?')) return;
+  try {
+    await api('DELETE', '/advances/' + id);
+    toast('Deleted');
+    loadAdvances(currentProject.id);
+    loadProjectSummary(currentProject.id);
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+async function loadAdvances(pid) {
+  try {
+    const advances = await api('GET', '/projects/' + pid + '/advances');
+    if (!advances) return;
+    window._advancesMap = {};
+    advances.forEach(a => window._advancesMap[a.id] = a);
+    const totalPaid = advances.reduce((s,a) => s + Number(a.paid_amount), 0);
+    const totalRecovered = advances.reduce((s,a) => s + Number(a.recovered_amount), 0);
+    const outstanding = totalPaid - totalRecovered;
+    document.getElementById('advances-summary').innerHTML =
+      '<div class="stat-card" style="--c:var(--red)"><div class="lbl">Total Advance Paid</div><div class="val">' + fmtMoney(totalPaid) + '</div></div>' +
+      '<div class="stat-card" style="--c:var(--green)"><div class="lbl">Total Recovered</div><div class="val">' + fmtMoney(totalRecovered) + '</div></div>' +
+      '<div class="stat-card" style="--c:var(--gold)"><div class="lbl">Outstanding Balance</div><div class="val">' + fmtMoney(outstanding) + '</div><div class="sub">Receivable from land owner</div></div>';
+    const body = document.getElementById('advances-body');
+    if (advances.length === 0) {
+      body.innerHTML = '<tr><td colspan="8"><div class="empty-state"><div class="ei">🤝</div><p>No advances recorded yet</p></div></td></tr>';
+      return;
+    }
+    const statusBadge = { outstanding: 'badge-gold', partial: 'badge-blue', fully_recovered: 'badge-green' };
+    const statusLabel = { outstanding: '⏳ Outstanding', partial: '🔄 Partial', fully_recovered: '✅ Recovered' };
+    body.innerHTML = advances.map(a => {
+      const outstanding = Number(a.paid_amount) - Number(a.recovered_amount);
+      const canRecover = outstanding > 0;
+      return '<tr>' +
+        '<td><strong>' + a.land_owner + '</strong></td>' +
+        '<td class="fz11">' + (a.description||'—') + '</td>' +
+        '<td class="fz11">' + fmtDate(a.paid_date) + '</td>' +
+        '<td class="mono fw7 text-red">−' + fmtMoney(a.paid_amount) + '</td>' +
+        '<td class="mono text-green">+' + fmtMoney(a.recovered_amount) + '</td>' +
+        '<td class="mono fw7 ' + (outstanding > 0 ? 'text-gold' : 'text-green') + '">' + fmtMoney(outstanding) + '</td>' +
+        '<td><span class="badge ' + (statusBadge[a.status]||'badge-gray') + '">' + (statusLabel[a.status]||a.status) + '</span></td>' +
+        '<td style="white-space:nowrap">' +
+          (canRecover ? '<button class="btn btn-ghost btn-sm" style="color:var(--green)" onclick="recoverAdvance(' + a.id + ')">💰 Recover</button>' : '') +
+          '<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="deleteAdvance(' + a.id + ')">🗑</button>' +
+        '</td>' +
+      '</tr>';
+    }).join('');
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+
 async function loadProjectReport(pid) {
   try {
     const r = await api('GET', `/projects/${pid}/report`);

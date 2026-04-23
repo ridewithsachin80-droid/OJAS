@@ -788,6 +788,56 @@ app.post('/api/admin/link-investments', auth('admin'), async (req, res) => {
 });
 
 // ══════════════════════════════════════════
+// LAND OWNER ADVANCES (Joint Venture - Recoverable)
+// ══════════════════════════════════════════
+app.get('/api/projects/:id/advances', auth(), async (req, res) => {
+  try {
+    const r = await pool.query(
+      'SELECT a.*,u.full_name as created_by_name FROM land_advances a LEFT JOIN users u ON u.id=a.created_by WHERE a.project_id=$1 ORDER BY a.paid_date DESC',
+      [req.params.id]
+    );
+    res.json(r.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/projects/:id/advances', auth('admin'), async (req, res) => {
+  const { land_owner, description, paid_amount, paid_date, notes } = req.body;
+  if (!land_owner || !paid_amount || !paid_date) return res.status(400).json({ error: 'Land owner, amount and date are required' });
+  try {
+    const r = await pool.query(
+      'INSERT INTO land_advances (project_id,land_owner,description,paid_amount,paid_date,notes,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
+      [req.params.id, land_owner, description||null, parseInt(paid_amount), paid_date, notes||null, req.user.id]
+    );
+    res.json(r.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.put('/api/advances/:id/recover', auth('admin'), async (req, res) => {
+  const { recovered_amount, recovered_date, notes } = req.body;
+  if (!recovered_amount || !recovered_date) return res.status(400).json({ error: 'Amount and date required' });
+  try {
+    const advR = await pool.query('SELECT * FROM land_advances WHERE id=$1', [req.params.id]);
+    if (!advR.rows.length) return res.status(404).json({ error: 'Advance not found' });
+    const adv = advR.rows[0];
+    const newRecovered = Number(adv.recovered_amount) + parseInt(recovered_amount);
+    const status = newRecovered >= Number(adv.paid_amount) ? 'fully_recovered' : 'partial';
+    await pool.query(
+      'UPDATE land_advances SET recovered_amount=$1,recovered_date=$2,status=$3,notes=COALESCE($4,notes),updated_at=NOW() WHERE id=$5',
+      [newRecovered, recovered_date, status, notes||null, req.params.id]
+    );
+    res.json({ message: 'Recovery recorded', status });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/advances/:id', auth('admin'), async (req, res) => {
+  try {
+    await pool.query('DELETE FROM land_advances WHERE id=$1', [req.params.id]);
+    res.json({ message: 'Advance deleted' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+
+// ══════════════════════════════════════════
 // TRANSACTIONS / ACCOUNTS
 // ══════════════════════════════════════════
 app.get('/api/projects/:id/transactions', auth(), async (req, res) => {
