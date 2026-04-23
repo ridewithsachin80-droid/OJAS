@@ -616,6 +616,32 @@ let currentInvestment = null;
 // ════════════════════════════════════════
 // API HELPER
 // ════════════════════════════════════════
+// Authenticated file download/view - bypasses the "No token" issue with direct links
+async function viewDoc(docId, isSaleDoc) {
+  try {
+    const endpoint = isSaleDoc ? '/sale-documents/' : '/documents/';
+    const r = await fetch('/api' + endpoint + docId + '/download', {
+      headers: { 'Authorization': 'Bearer ' + token, 'X-Device-Token': deviceToken }
+    });
+    if (!r.ok) { toast('Could not load document', 'error'); return; }
+    const contentType = r.headers.get('content-type') || 'application/octet-stream';
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    // PDFs open inline, images open inline, others download
+    if (contentType.includes('pdf') || contentType.includes('image')) {
+      window.open(url, '_blank');
+    } else {
+      const a = document.createElement('a');
+      const cd = r.headers.get('content-disposition') || '';
+      const match = cd.match(/filename="([^"]+)"/);
+      a.download = match ? match[1] : 'document';
+      a.href = url;
+      a.click();
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  } catch(e) { toast('Download failed: ' + e.message, 'error'); }
+}
+
 async function api(method, path, body, isFormData) {
   const opts = { method, headers: { 'Authorization': `Bearer ${token}`, 'X-Device-Token': deviceToken } };
   if (isFormData) { opts.body = body; }
@@ -804,7 +830,7 @@ function openModal(type, data) {
   else if (type === 'project-edit') inner.innerHTML = projectFormHTML(currentProject);
   else if (type === 'investment-form') inner.innerHTML = investmentFormHTML(data);
   else if (type === 'investment-edit') inner.innerHTML = investmentFormHTML(data);
-  else if (type === 'txn-form') inner.innerHTML = txnFormHTML(data);
+  else if (type === 'txn-form') { inner.innerHTML = txnFormHTML(data); txnUpdateCats(); }
   else if (type === 'doc-upload') inner.innerHTML = docUploadHTML();
   else if (type === 'stage-form') inner.innerHTML = stageFormHTML();
   else if (type === 'sale-form') inner.innerHTML = saleFormHTML();
@@ -1354,23 +1380,35 @@ async function deleteReturn(invId, retId) {
 // ════════════════════════════════════════
 // TRANSACTIONS
 // ════════════════════════════════════════
+var _txnCats = {
+  income: ['Site Sale','Rental Income','Other Income'],
+  expense: ['Land Purchase','Construction','Approval Fees','Legal & Registration','Marketing','Admin','Utilities','Labour','Materials','Other Expense'],
+  capital_in: ['Investor Capital'],
+  profit_distribution: ['Investor Payout','Working Group Payout']
+};
+
+function txnUpdateCats() {
+  var tp = document.getElementById('tf-type').value;
+  var s = document.getElementById('tf-cat');
+  if (!s) return;
+  s.innerHTML = (_txnCats[tp]||[]).map(function(c){return '<option>'+c+'</option>';}).join('');
+}
+
 function txnFormHTML(t) {
-  const cats = { income: ['Site Sale','Rental Income','Other Income'], expense: ['Land Purchase','Construction','Approval Fees','Legal & Registration','Marketing','Admin','Utilities','Labour','Materials','Other Expense'], capital_in: ['Investor Capital'], profit_distribution: ['Investor Payout','Working Group Payout'] };
-  return '<div class="modal-title">' + (t?'Edit':'New') + ' Transaction<button class="modal-close" onclick="closeModal()">x</button></div>' +
+  return '<div class="modal-title">' + (t?'Edit':'New') + ' Transaction<button class="modal-close" onclick="closeModal()">×</button></div>' +
   '<div class="form-grid">' +
     '<div class="fg"><label>Type *</label><select id="tf-type" onchange="txnUpdateCats()">' +
       '<option value="income">Income</option><option value="expense">Expense</option>' +
       '<option value="capital_in">Capital In</option><option value="profit_distribution">Profit Distribution</option>' +
     '</select></div>' +
-    '<div class="fg"><label>Category *</label><select id="tf-cat"><option>Loading...</option></select></div>' +
-    '<div class="fg"><label>Amount (Rs) *</label><input type="number" id="tf-amount" value="' + (t&&t.amount?t.amount:'') + '" min="1"/></div>' +
+    '<div class="fg"><label>Category *</label><select id="tf-cat"><option>—</option></select></div>' +
+    '<div class="fg"><label>Amount (₹) *</label><input type="number" id="tf-amount" value="' + (t&&t.amount?t.amount:'') + '" min="1"/></div>' +
     '<div class="fg"><label>Date *</label><input type="date" id="tf-date" value="' + (t&&t.transaction_date?t.transaction_date.slice(0,10):new Date().toISOString().slice(0,10)) + '"/></div>' +
     '<div class="fg full"><label>Description</label><input id="tf-desc" value="' + (t&&t.description?t.description:'') + '" placeholder="What is this for?"/></div>' +
     '<div class="fg"><label>Reference / Cheque / UTR</label><input id="tf-ref" value="' + (t&&t.reference?t.reference:'') + '" placeholder="e.g. TXN123456"/></div>' +
     '<div class="fg"><label>Paid To / Received From</label><input id="tf-party" value="' + (t&&t.party?t.party:'') + '" placeholder="Vendor or investor name"/></div>' +
   '</div>' +
-  '<div class="form-actions"><button class="btn btn-primary" onclick="saveTxn()">Save Entry</button><button class="btn btn-outline" onclick="closeModal()">Cancel</button></div>' +
-  '<scri' + 'pt>var _txnCats=' + JSON.stringify(cats) + ';function txnUpdateCats(){var tp=document.getElementById("tf-type").value;var s=document.getElementById("tf-cat");s.innerHTML=(_txnCats[tp]||[]).map(function(c){return"<option>"+c+"</option>";}).join("");}txnUpdateCats();</' + 'script>';
+  '<div class="form-actions"><button class="btn btn-primary" onclick="saveTxn()">Save Entry</button><button class="btn btn-outline" onclick="closeModal()">Cancel</button></div>';
 }
 
 let _allTxns = [];
@@ -1680,7 +1718,7 @@ async function loadDocuments(pid) {
             <td><span class="badge ${d.is_public?'badge-green':'badge-gray'}">${d.is_public?'Public':'Admin Only'}</span></td>
             <td class="fz11">${fmtDate(d.created_at)}</td>
             <td style="white-space:nowrap">
-              <a href="/api/documents/${d.id}/download" target="_blank" class="btn btn-outline btn-sm">⬇ View</a>
+              <button class="btn btn-outline btn-sm" onclick="viewDoc(${d.id})">⬇ View</button>
               <button class="btn btn-ghost btn-sm" onclick="deleteDoc(${d.id})">🗑</button>
             </td>
           </tr>`).join('')}
@@ -1821,7 +1859,7 @@ async function loadSales(pid) {
       <td class="mono fw7 text-green">${fmtMoney(s.sale_amount)}</td>
       <td class="fz11">${fmtDate(s.sale_date)}</td>
       <td class="mono fz11">${s.doc_number||'—'}</td>
-      <td>${s.documents?.length?s.documents.map(d=>`<a href="/api/sale-documents/${d.id}/download" target="_blank" class="badge badge-blue" style="margin-right:4px">📄 ${d.title||d.doc_type}</a>`).join(''):'—'}</td>
+      <td>${s.documents?.length?s.documents.map(d=>`<button class="btn btn-ghost btn-sm" onclick="viewDoc(${d.id},true)" style="margin-right:4px">📄 ${d.title||d.doc_type}</button>`).join(''):'—'}</td>
       <td><span class="fz11 text-muted">${s.created_by_name||'Admin'}</span></td>
     </tr>`).join('');
 }
@@ -2275,7 +2313,7 @@ async function loadInvDocuments(pid) {
   const el = document.getElementById('inv-docs-list');
   if (!docs.length) { el.innerHTML = '<div class="empty-state"><div class="ei">📁</div><p>No documents shared yet</p></div>'; return; }
   el.innerHTML = `<div class="card"><div class="card-body" style="padding:0"><table class="dt"><thead><tr><th>Type</th><th>Title</th><th>File</th><th>Date</th><th></th></tr></thead><tbody>
-    ${docs.map(d=>`<tr><td><span class="badge badge-blue">${d.doc_type.replace('_',' ')}</span></td><td>${d.title}</td><td class="fz11">${d.file_name||'—'}</td><td class="fz11">${fmtDate(d.created_at)}</td><td><a href="/api/documents/${d.id}/download" target="_blank" class="btn btn-outline btn-sm">⬇ View</a></td></tr>`).join('')}
+    ${docs.map(d=>`<tr><td><span class="badge badge-blue">${d.doc_type.replace('_',' ')}</span></td><td>${d.title}</td><td class="fz11">${d.file_name||'—'}</td><td class="fz11">${fmtDate(d.created_at)}</td><td><button class="btn btn-outline btn-sm" onclick="viewDoc(${d.id})">⬇ View</button></td></tr>`).join('')}
   </tbody></table></div></div>`;
 }
 
