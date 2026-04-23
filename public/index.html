@@ -333,9 +333,10 @@ table.dt tr:hover td{background:#FAFBFF}
         <div id="pt-investors" class="ptab-content" style="display:none">
           <div class="flex-between mb-12" style="margin-bottom:12px">
             <div class="card-title">Investor Register</div>
-            <div style="display:flex;gap:8px">
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
               <button class="btn btn-outline btn-sm" onclick="autoLinkInvestors()" title="Match investments to user accounts by email">🔗 Link Accounts</button>
-              <button class="btn btn-primary btn-sm" onclick="openModal('investment-form')">+ Add Investor</button>
+              <button class="btn btn-outline btn-sm" onclick="openLinkExistingInvestor()" title="Add an existing investor to this project">👤 Link Existing</button>
+              <button class="btn btn-primary btn-sm" onclick="openModal('investment-form')">+ Add New Investor</button>
             </div>
           </div>
           <div class="card"><div class="tbl-wrap"><table class="dt" id="inv-table"><thead><tr><th>ID</th><th>Name</th><th>PAN</th><th>Total Invested (₹)</th><th>Pool Share</th><th>Profit Entitlement</th><th>Date</th><th>KYC</th><th>Login</th><th>Ledger</th><th>Actions</th></tr></thead><tbody id="inv-body"></tbody></table></div></div>
@@ -807,6 +808,7 @@ function openModal(type, data) {
   else if (type === 'doc-upload') inner.innerHTML = docUploadHTML();
   else if (type === 'stage-form') inner.innerHTML = stageFormHTML();
   else if (type === 'sale-form') inner.innerHTML = saleFormHTML();
+  else if (type === 'link-existing-investor') inner.innerHTML = data;
   else if (type === 'advance-form') inner.innerHTML = advanceFormHTML();
   else if (type === 'advance-recover') inner.innerHTML = advanceRecoverHTML(data);
   else if (type === 'user-form') inner.innerHTML = userFormHTML(data);
@@ -1060,6 +1062,91 @@ async function loadProjectInvestors(pid) {
 }
 
 function editInvestor(id) { const inv = window._investorsMap[id]; if (inv) openModal('investment-edit', inv); }
+
+async function openLinkExistingInvestor() {
+  // Load all users with investor role
+  try {
+    const users = await api('GET', '/users');
+    if (!users) return;
+    const investors = users.filter(u => u.role === 'investor');
+    if (!investors.length) { toast('No investor accounts found. Create a user account first.', 'error'); return; }
+
+    // Also get existing investments in this project to exclude already-linked investors
+    const existing = await api('GET', '/projects/' + currentProject.id + '/investments');
+    const existingUserIds = new Set((existing||[]).filter(i=>i.user_id).map(i=>i.user_id));
+
+    const options = investors.map(u =>
+      '<option value="' + u.id + '" data-name="' + (u.full_name||'').replace(/"/g,'') + '" data-email="' + u.email + '" data-mobile="' + (u.mobile||'') + '"' +
+      (existingUserIds.has(u.id) ? ' disabled style="color:#999"' : '') + '>' +
+      (u.full_name||u.email) + ' — ' + u.email +
+      (existingUserIds.has(u.id) ? ' (already in this project)' : '') +
+      '</option>'
+    ).join('');
+
+    const html =
+      '<div class="modal-title">Link Existing Investor to ' + currentProject.name + '<button class="modal-close" onclick="closeModal()">×</button></div>' +
+      '<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:#1E40AF">' +
+        '👤 Select an existing investor user and set their investment amount for this project. Their profile details will be copied automatically.' +
+      '</div>' +
+      '<div class="form-grid">' +
+        '<div class="fg full"><label>Select Investor *</label>' +
+          '<select id="lei-user" onchange="prefillLinkInvestor(this)">' +
+            '<option value="">— Choose investor —</option>' + options +
+          '</select>' +
+        '</div>' +
+        '<div class="fg"><label>Full Name</label><input id="lei-name" placeholder="Auto-filled from account"/></div>' +
+        '<div class="fg"><label>Mobile</label><input id="lei-mobile" placeholder="Auto-filled from account"/></div>' +
+        '<div class="fg"><label>PAN</label><input id="lei-pan" style="text-transform:uppercase"/></div>' +
+        '<div class="fg"><label>KYC Status</label><select id="lei-kyc"><option value="pending">Pending</option><option value="verified">Verified</option></select></div>' +
+      '</div>' +
+      '<div style="background:#f0f7ff;border:1px solid #c8def5;border-radius:10px;padding:14px;margin:14px 0">' +
+        '<div style="font-weight:700;font-size:13px;color:var(--navy);margin-bottom:10px">Investment Details for ' + currentProject.name + '</div>' +
+        '<div class="form-grid">' +
+          '<div class="fg"><label>Amount (₹)</label><input type="number" id="lei-amount" placeholder="Investment amount (optional)"/></div>' +
+          '<div class="fg"><label>Date of Transfer</label><input type="date" id="lei-date"/></div>' +
+          '<div class="fg"><label>UTR / Reference</label><input id="lei-utr" placeholder="Bank transfer ref"/></div>' +
+          '<div class="fg"><label>Notes</label><input id="lei-notes" placeholder="Optional"/></div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="form-actions">' +
+        '<button class="btn btn-primary" onclick="linkExistingInvestor()">Link to Project</button>' +
+        '<button class="btn btn-outline" onclick="closeModal()">Cancel</button>' +
+      '</div>';
+
+    openModal('link-existing-investor', html);
+  } catch(e) { toast(e.message, 'error'); }
+}
+
+function prefillLinkInvestor(sel) {
+  const opt = sel.options[sel.selectedIndex];
+  if (!opt.value) return;
+  document.getElementById('lei-name').value = opt.dataset.name || '';
+  document.getElementById('lei-mobile').value = opt.dataset.mobile || '';
+}
+
+async function linkExistingInvestor() {
+  const userId = v('lei-user');
+  if (!userId) { toast('Please select an investor', 'error'); return; }
+  const body = {
+    user_id: parseInt(userId),
+    full_name: v('lei-name'),
+    mobile: v('lei-mobile'),
+    pan: v('lei-pan')?.toUpperCase() || undefined,
+    kyc_status: v('lei-kyc'),
+    notes: v('lei-notes')
+  };
+  const amt = v('lei-amount'), utr = v('lei-utr'), dt = v('lei-date');
+  if (amt) body.amount = amt;
+  if (utr) body.utr_reference = utr;
+  if (dt) body.investment_date = dt;
+  try {
+    await api('POST', '/projects/' + currentProject.id + '/investments', body);
+    toast('Investor linked to ' + currentProject.name + ' successfully');
+    closeModal();
+    loadProjectInvestors(currentProject.id);
+    loadProjectSummary(currentProject.id);
+  } catch(e) { toast(e.message, 'error'); }
+}
 
 async function autoLinkInvestors() {
   try {
