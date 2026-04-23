@@ -962,7 +962,7 @@ function investmentFormHTML(inv) {
 
 async function loadProjectInvestors(pid) {
   try {
-    const invs = await api('GET', `/projects/${pid}/investors`);
+    const invs = await api('GET', `/projects/${pid}/investments`);
     if (!invs) return;
     const body = document.getElementById('inv-body');
     window._investorsMap = {};
