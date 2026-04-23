@@ -952,7 +952,9 @@ app.get('/api/projects/:id/report', auth(), async (req, res) => {
     const totalCapital = invs.reduce((s, i) => s + Number(i.amount), 0);
     const totalExpense = txns.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
     const totalIncome = sales.rows.reduce((s, r) => s + Number(r.sale_amount), 0);
-    const netProfit = totalIncome - totalCapital - totalExpense;
+    // Net Profit = Sales Income - Expenses only.
+    // Capital raised is investors' principal (returned separately) — not deducted from profit.
+    const netProfit = totalIncome - totalExpense;
     const invPoolShare = Math.max(0, netProfit * 0.5);
     const wgShare = Math.max(0, netProfit * 0.5);
 
