@@ -1028,7 +1028,7 @@ async function saveInvestment(id) {
 // ═══════════════════════════════════════════════════════
 // INVESTOR LEDGER MODAL (Payments In + Returns Out)
 // ═══════════════════════════════════════════════════════
-async function openPaymentsModal(invId) {
+async function openPaymentsModal(invId, defaultTab) {
   const invName = (window._investorsMap[invId]?.full_name || window._investorsMap[invId]?.user_full_name || 'Investor');
   const inner = document.getElementById('modal-inner');
   document.getElementById('modal-bg').classList.add('open');
@@ -1037,6 +1037,7 @@ async function openPaymentsModal(invId) {
     const stmt = await api('GET', '/investments/' + invId + '/statement');
     if (!stmt) return;
     renderLedgerModal(invId, invName, stmt);
+    if (defaultTab && defaultTab !== 'in') ledgerTab(defaultTab);
   } catch(e) { toast(e.message,'error'); }
 }
 
@@ -1179,8 +1180,7 @@ async function addReturn(invId) {
     });
     toast('Return recorded');
     loadProjectInvestors(currentProject.id); loadProjectSummary(currentProject.id);
-    openPaymentsModal(invId);
-    setTimeout(() => ledgerTab('out'), 300);
+    openPaymentsModal(invId, 'out');
   } catch(e) { toast(e.message,'error'); }
 }
 
@@ -1190,8 +1190,7 @@ async function deleteReturn(invId, retId) {
     await api('DELETE', '/investments/' + invId + '/returns/' + retId);
     toast('Return deleted');
     loadProjectInvestors(currentProject.id); loadProjectSummary(currentProject.id);
-    openPaymentsModal(invId);
-    setTimeout(() => ledgerTab('out'), 300);
+    openPaymentsModal(invId, 'out');
   } catch(e) { toast(e.message,'error'); }
 }
 
