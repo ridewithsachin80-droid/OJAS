@@ -1100,13 +1100,14 @@ app.get('/api/projects/:id/report', auth(), async (req, res) => {
       if (!access.rows.length) return res.status(403).json({ error: 'Access denied' });
     }
 
-    const [project, milestones, investments, allTransactions, stages, sales] = await Promise.all([
+    const [project, milestones, investments, allTransactions, stages, sales, advances] = await Promise.all([
       pool.query('SELECT * FROM projects WHERE id=$1', [pid]),
       pool.query('SELECT * FROM milestones WHERE project_id=$1 ORDER BY order_index', [pid]),
       pool.query(`SELECT i.*,u.full_name as user_name,ROUND(i.amount::numeric/NULLIF((SELECT SUM(amount) FROM investments WHERE project_id=$1),0)*100,4) as pool_share FROM investments i LEFT JOIN users u ON u.id=i.user_id WHERE i.project_id=$1 ORDER BY i.amount DESC`, [pid]),
       pool.query('SELECT * FROM transactions WHERE project_id=$1 ORDER BY transaction_date DESC', [pid]),
       pool.query('SELECT id,title,description,stage_date,created_at FROM stage_updates WHERE project_id=$1 ORDER BY stage_date DESC', [pid]),
-      isAdmin ? pool.query('SELECT * FROM site_sales WHERE project_id=$1 ORDER BY sale_date DESC', [pid]) : pool.query("SELECT plot_number,plot_area,sale_amount,sale_date FROM site_sales WHERE project_id=$1 ORDER BY sale_date DESC", [pid])
+      isAdmin ? pool.query('SELECT * FROM site_sales WHERE project_id=$1 ORDER BY sale_date DESC', [pid]) : pool.query("SELECT plot_number,plot_area,sale_amount,sale_date FROM site_sales WHERE project_id=$1 ORDER BY sale_date DESC", [pid]),
+      pool.query('SELECT paid_amount,recovered_amount,land_owner,status FROM land_advances WHERE project_id=$1', [pid])
     ]);
 
     const p = project.rows[0];
@@ -1121,11 +1122,17 @@ app.get('/api/projects/:id/report', auth(), async (req, res) => {
     const totalCapital = invs.reduce((s, i) => s + Number(i.amount), 0);
     const totalExpense = allTxns.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
     const totalIncome = sales.rows.reduce((s, r) => s + Number(r.sale_amount), 0);
-    // Net Profit = Sales Income - Expenses only.
-    // Capital raised is investors' principal (returned separately) — not deducted from profit.
+    // Advance to land owner: paid out (cash outflow) but recoverable — NOT an expense
+    const totalAdvancePaid = advances.rows.reduce((s, a) => s + Number(a.paid_amount), 0);
+    const totalAdvanceRecovered = advances.rows.reduce((s, a) => s + Number(a.recovered_amount), 0);
+    const netAdvanceOutstanding = totalAdvancePaid - totalAdvanceRecovered;
+    // Net Profit = Sales Income - Expenses only (advance doesn't affect profit)
     const netProfit = totalIncome - totalExpense;
     const invPoolShare = Math.max(0, netProfit * 0.5);
     const wgShare = Math.max(0, netProfit * 0.5);
+    // Net Cash = Capital - Advance Paid + Advance Recovered - Expenses - Distributions
+    const totalDistributed = allTxns.filter(t => t.type === 'profit_distribution').reduce((s, t) => s + Number(t.amount), 0);
+    const netCash = totalCapital + totalIncome - totalExpense - totalAdvancePaid + totalAdvanceRecovered - totalDistributed;
 
     res.json({
       project: p,
@@ -1137,6 +1144,11 @@ app.get('/api/projects/:id/report', auth(), async (req, res) => {
         netProfit,
         invPoolShare,
         wgShare,
+        totalAdvancePaid,
+        totalAdvanceRecovered,
+        netAdvanceOutstanding,
+        netCash,
+        advances: advances.rows,
         targetCapital: p.target_capital,
         capitalPct: p.target_capital > 0 ? ((totalCapital / p.target_capital) * 100).toFixed(2) : '0',
         plotsSold: sales.rows.length

@@ -870,11 +870,15 @@ async function loadProjectSummary(pid) {
   try {
     const r = await api('GET', `/projects/${pid}/report`);
     const s = r.summary;
-    document.getElementById('proj-stats').innerHTML = `
-      <div class="stat-card" style="--c:var(--blue)"><div class="lbl">Investors</div><div class="val">${s.totalInvestors}</div></div>
-      <div class="stat-card" style="--c:var(--gold)"><div class="lbl">Capital Raised</div><div class="val">${fmtMoney(s.totalCapital)}</div><div class="sub">Target: ${fmtMoney(s.targetCapital)}</div></div>
-      <div class="stat-card" style="--c:var(--green)"><div class="lbl">Total Sales</div><div class="val">${fmtMoney(s.totalIncome)}</div><div class="sub">${s.plotsSold} plots sold</div></div>
-      <div class="stat-card" style="--c:var(--navy)"><div class="lbl">Net Profit</div><div class="val">${fmtMoney(s.netProfit)}</div><div class="sub">Each group: ${fmtMoney(s.invPoolShare)}</div></div>`;
+    const advHtml = s.totalAdvancePaid > 0
+      ? '<div class="stat-card" style="--c:var(--gold)"><div class="lbl">Advance to LO</div><div class="val">' + fmtMoney(s.totalAdvancePaid) + '</div><div class="sub">Outstanding: ' + fmtMoney(s.netAdvanceOutstanding) + '</div></div>'
+      : '';
+    document.getElementById('proj-stats').innerHTML =
+      '<div class="stat-card" style="--c:var(--blue)"><div class="lbl">Investors</div><div class="val">' + s.totalInvestors + '</div></div>' +
+      '<div class="stat-card" style="--c:var(--gold)"><div class="lbl">Capital Raised</div><div class="val">' + fmtMoney(s.totalCapital) + '</div><div class="sub">Target: ' + fmtMoney(s.targetCapital) + '</div></div>' +
+      advHtml +
+      '<div class="stat-card" style="--c:var(--green)"><div class="lbl">Total Sales</div><div class="val">' + fmtMoney(s.totalIncome) + '</div><div class="sub">' + s.plotsSold + ' plots sold</div></div>' +
+      '<div class="stat-card" style="--c:var(--navy)"><div class="lbl">Net Profit</div><div class="val">' + fmtMoney(s.netProfit) + '</div><div class="sub">Each group: ' + fmtMoney(s.invPoolShare) + '</div></div>';
     const p = r.project;
     document.getElementById('proj-info-box').innerHTML = infoGrid([
       ['AOP PAN', p.aop_pan||'—'], ['Location', p.location||'—'], ['Survey / Plot', p.survey_details||'—'],
@@ -897,6 +901,7 @@ async function loadProjectSummary(pid) {
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px">
         <div class="stat-card" style="--c:var(--green)"><div class="lbl">Total Income</div><div class="val fz13">${fmtMoney(s.totalIncome)}</div></div>
         <div class="stat-card" style="--c:var(--red)"><div class="lbl">Total Expense</div><div class="val fz13">${fmtMoney(s.totalExpense)}</div></div>
+        ${s.totalAdvancePaid > 0 ? `<div class="stat-card" style="--c:var(--gold)"><div class="lbl">LO Advance Paid</div><div class="val fz13">${fmtMoney(s.totalAdvancePaid)}</div></div><div class="stat-card" style="--c:var(--green);border-style:dashed"><div class="lbl">Advance Recovered</div><div class="val fz13">${fmtMoney(s.totalAdvanceRecovered)}</div></div>` : ''}
         <div class="stat-card" style="--c:var(--gold)"><div class="lbl">Inv. Pool (50%)</div><div class="val fz13">${fmtMoney(s.invPoolShare)}</div></div>
         <div class="stat-card" style="--c:var(--blue)"><div class="lbl">Working Group (50%)</div><div class="val fz13">${fmtMoney(s.wgShare)}</div></div>
       </div>`;
@@ -1309,6 +1314,29 @@ function renderAccounts(txns) {
     '<div class="stat-card" style="--c:var(--navy)"><div class="lbl">Cash Balance</div><div class="val">' + fmtMoney(balance) + '</div></div>';
 
   const plColor = grossProfit >= 0 ? 'var(--green)' : 'var(--red)';
+  // Fetch advances for P&L panel
+  var advPL = '';
+  if (currentProject) {
+    api('GET', '/projects/' + currentProject.id + '/advances').then(function(advs) {
+      if (!advs || !advs.length) return;
+      var advPaid = advs.reduce(function(s,a){return s+Number(a.paid_amount);},0);
+      var advRec = advs.reduce(function(s,a){return s+Number(a.recovered_amount);},0);
+      var advOut = advPaid - advRec;
+      var plEl = document.getElementById('acct-pl');
+      if (!plEl) return;
+      var current = plEl.innerHTML;
+      var insert = plRow('(-) Advance to LO (Paid)', advPaid, 'var(--gold)') +
+        plRow('(+) Advance Recovered', advRec, 'var(--green)') +
+        '<div style="border-left:3px solid var(--gold);padding-left:8px;font-size:12px;color:var(--gold);margin:2px 0">Outstanding: ' + fmtMoney(advOut) + ' (receivable from LO)</div>';
+      var insertAt = '<div style="border-top:1.5px solid var(--border);margin:4px 0"></div>' +
+        plRow('Net Cash Balance', balance, balance>=0?'var(--green)':'var(--red)', true);
+      plEl.innerHTML = plEl.innerHTML.replace(
+        insertAt,
+        insert + insertAt
+      );
+    }).catch(function(){});
+  }
+
   document.getElementById('acct-pl').innerHTML =
     '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:6px">' +
       '<div style="font-weight:700;font-size:11px;color:var(--muted);letter-spacing:.5px;text-transform:uppercase;margin-bottom:4px">P&amp;L Statement</div>' +
@@ -1859,7 +1887,12 @@ function reportHTML(r, isAdmin) {
         <div class="stat-card" style="--c:var(--navy)"><div class="lbl">Net Profit</div><div class="val fz13">${fmtMoney(s.netProfit)}</div></div>
         <div class="stat-card" style="--c:var(--blue)"><div class="lbl">Investor Pool (50%)</div><div class="val fz13">${fmtMoney(s.invPoolShare)}</div></div>
         <div class="stat-card" style="--c:var(--blue)"><div class="lbl">Working Group (50%)</div><div class="val fz13">${fmtMoney(s.wgShare)}</div></div>
+        ${s.totalAdvancePaid > 0 ? `<div class="stat-card" style="--c:var(--gold)"><div class="lbl">Advance to Land Owner</div><div class="val fz13">${fmtMoney(s.totalAdvancePaid)}</div></div><div class="stat-card" style="--c:var(--green);border-style:dashed"><div class="lbl">Advance Recovered</div><div class="val fz13">${fmtMoney(s.totalAdvanceRecovered)}</div></div><div class="stat-card" style="--c:var(--gold);border-width:2px"><div class="lbl">Outstanding (Receivable)</div><div class="val fz13">${fmtMoney(s.netAdvanceOutstanding)}</div></div>` : ''}
       </div>
+      ${s.totalAdvancePaid > 0 ? `<div style="margin-top:12px;padding:10px 14px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;font-size:12px;color:#92400E">
+        <strong>📌 Advance Note:</strong> ₹${fmtMoney(s.totalAdvancePaid)} was paid to the land owner as a Joint Venture advance (recoverable). 
+        This does not affect Net Profit. Outstanding balance of ${fmtMoney(s.netAdvanceOutstanding)} is receivable from the land owner after project completion.
+      </div>` : ''}
     </div>
     <div class="report-section"><h3>👥 Investor Register</h3>
       <div class="tbl-wrap"><table class="dt"><thead><tr><th>Code</th><th>Name</th><th>PAN</th><th>Amount</th><th>Pool %</th><th>Profit Entitlement %</th><th>Projected Profit</th><th>Total Return</th></tr></thead><tbody>
