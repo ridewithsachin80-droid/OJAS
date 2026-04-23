@@ -180,6 +180,20 @@ CREATE TABLE IF NOT EXISTS investor_payments (
 );
 
 CREATE INDEX IF NOT EXISTS idx_investor_payments_investment ON investor_payments(investment_id);
+-- Investor Returns (profit distributions back to investors)
+CREATE TABLE IF NOT EXISTS investor_returns (
+  id SERIAL PRIMARY KEY,
+  investment_id INTEGER REFERENCES investments(id) ON DELETE CASCADE,
+  amount BIGINT NOT NULL,
+  return_type VARCHAR(50) DEFAULT 'profit_distribution',
+  utr_reference VARCHAR(255),
+  return_date DATE NOT NULL,
+  notes TEXT,
+  created_by INTEGER REFERENCES users(id),
+  created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_investor_returns_investment ON investor_returns(investment_id);
+
 
 -- Create indexes
 -- Add full_name to investments if not exists (safe for existing DBs)

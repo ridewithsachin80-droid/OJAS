@@ -24,7 +24,18 @@ const upload = multer({
 
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
+// Serve static with special header for service worker scope
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('sw.js')) {
+      res.setHeader('Service-Worker-Allowed', '/');
+      res.setHeader('Cache-Control', 'no-cache');
+    }
+    if (filePath.endsWith('manifest.json')) {
+      res.setHeader('Cache-Control', 'no-cache');
+    }
+  }
+}));
 
 // ══════════════════════════════════════════
 // HEALTH
@@ -588,6 +599,67 @@ app.delete('/api/investments/:id/payments/:pid', auth('admin'), async (req, res)
     await pool.query('DELETE FROM investor_payments WHERE id=$1', [req.params.pid]);
     await pool.query('UPDATE investments SET amount=GREATEST(0,amount-$1),updated_at=NOW() WHERE id=$2', [pmt.amount, req.params.id]);
     res.json({ message: 'Payment deleted' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Investor Returns (profit paid back to investors) ──
+app.get('/api/investments/:id/returns', auth('admin'), async (req, res) => {
+  try {
+    const r = await pool.query(
+      'SELECT r.*,u.full_name as created_by_name FROM investor_returns r LEFT JOIN users u ON u.id=r.created_by WHERE r.investment_id=$1 ORDER BY r.return_date DESC,r.created_at DESC',
+      [req.params.id]
+    );
+    res.json(r.rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/investments/:id/returns', auth('admin'), async (req, res) => {
+  const { amount, return_type, utr_reference, return_date, notes } = req.body;
+  if (!amount || !return_date) return res.status(400).json({ error: 'Amount and date are required' });
+  try {
+    const invId = req.params.id;
+    const invR = await pool.query('SELECT * FROM investments WHERE id=$1', [invId]);
+    if (!invR.rows.length) return res.status(404).json({ error: 'Investor not found' });
+    const inv = invR.rows[0];
+    const pr = await pool.query(
+      'INSERT INTO investor_returns (investment_id,amount,return_type,utr_reference,return_date,notes,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *',
+      [invId, parseInt(amount), return_type||'profit_distribution', utr_reference||null, return_date, notes||null, req.user.id]
+    );
+    // Record as profit_distribution transaction
+    await pool.query(
+      'INSERT INTO transactions (project_id,type,category,amount,description,transaction_date,reference,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+      [inv.project_id, 'profit_distribution', return_type||'Investor Payout', parseInt(amount),
+       `Return to ${inv.investor_code}${notes?' — '+notes:''}`, return_date, utr_reference||null, req.user.id]
+    );
+    res.json(pr.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/investments/:id/returns/:rid', auth('admin'), async (req, res) => {
+  try {
+    const rR = await pool.query('SELECT * FROM investor_returns WHERE id=$1 AND investment_id=$2', [req.params.rid, req.params.id]);
+    if (!rR.rows.length) return res.status(404).json({ error: 'Return not found' });
+    await pool.query('DELETE FROM investor_returns WHERE id=$1', [req.params.rid]);
+    res.json({ message: 'Return deleted' });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Combined summary for an investor (payments in + returns out) ──
+app.get('/api/investments/:id/statement', auth('admin'), async (req, res) => {
+  try {
+    const [pmts, rets, inv] = await Promise.all([
+      pool.query('SELECT * FROM investor_payments WHERE investment_id=$1 ORDER BY payment_date', [req.params.id]),
+      pool.query('SELECT * FROM investor_returns WHERE investment_id=$1 ORDER BY return_date', [req.params.id]),
+      pool.query('SELECT * FROM investments WHERE id=$1', [req.params.id])
+    ]);
+    const totalIn  = pmts.rows.reduce((s,p)=>s+Number(p.amount),0);
+    const totalOut = rets.rows.reduce((s,r)=>s+Number(r.amount),0);
+    res.json({
+      investor: inv.rows[0],
+      payments: pmts.rows,
+      returns: rets.rows,
+      summary: { total_invested: totalIn, total_returned: totalOut, net_position: totalIn - totalOut }
+    });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

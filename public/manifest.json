@@ -1,0 +1,33 @@
+{
+  "name": "InvestTrack — AOP Platform",
+  "short_name": "InvestTrack",
+  "description": "AOP Real Estate Investment Management Platform",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0F1E3D",
+  "theme_color": "#1B3A6B",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["finance", "business"],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "url": "/",
+      "description": "Open project dashboard"
+    }
+  ]
+}
