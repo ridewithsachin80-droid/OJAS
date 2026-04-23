@@ -1713,10 +1713,17 @@ function printReport() { window.print(); }
 // CERTIFICATES
 // ════════════════════════════════════════
 function genCertificate(inv) {
-  // Build cert popup
-  const total = 0; // Will be reloaded
+  // Calculate total capital from all investors in the map for pool share
+  const totalCap = Object.values(window._investorsMap || {}).reduce((s, i) => s + Number(i.amount), 0);
+  const certs = buildCertificates(inv, currentProject, totalCap);
   openModal('cert-view');
-  document.getElementById('modal-inner').innerHTML = certHTML(inv, currentProject, 'ack') + '<br/>' + certHTML(inv, currentProject, 'profit');
+  document.getElementById('modal-inner').innerHTML =
+    '<div class="modal-title">Investment Certificates — ' + (inv.full_name||inv.user_full_name||'Investor') +
+    '<button class="modal-close" onclick="closeModal()">×</button></div>' +
+    certs.ackCert + '<br style="margin:16px 0"/>' + certs.profCert +
+    '<div style="text-align:center;margin-top:20px">' +
+      '<button class="btn btn-primary" onclick="window.print()">🖨 Print Certificates</button>' +
+    '</div>';
 }
 
 function buildCertificates(inv, proj, totalCap) {

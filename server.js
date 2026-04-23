@@ -1004,20 +1004,26 @@ app.get('/api/projects/:id/report', auth(), async (req, res) => {
       if (!access.rows.length) return res.status(403).json({ error: 'Access denied' });
     }
 
-    const [project, milestones, investments, transactions, stages, sales] = await Promise.all([
+    const [project, milestones, investments, allTransactions, stages, sales] = await Promise.all([
       pool.query('SELECT * FROM projects WHERE id=$1', [pid]),
       pool.query('SELECT * FROM milestones WHERE project_id=$1 ORDER BY order_index', [pid]),
       pool.query(`SELECT i.*,u.full_name as user_name,ROUND(i.amount::numeric/NULLIF((SELECT SUM(amount) FROM investments WHERE project_id=$1),0)*100,4) as pool_share FROM investments i LEFT JOIN users u ON u.id=i.user_id WHERE i.project_id=$1 ORDER BY i.amount DESC`, [pid]),
-      isAdmin ? pool.query('SELECT * FROM transactions WHERE project_id=$1 ORDER BY transaction_date DESC', [pid]) : pool.query("SELECT id,type,category,amount,description,transaction_date,reference FROM transactions WHERE project_id=$1 AND type IN ('capital_in','income') ORDER BY transaction_date DESC", [pid]),
+      pool.query('SELECT * FROM transactions WHERE project_id=$1 ORDER BY transaction_date DESC', [pid]),
       pool.query('SELECT id,title,description,stage_date,created_at FROM stage_updates WHERE project_id=$1 ORDER BY stage_date DESC', [pid]),
       isAdmin ? pool.query('SELECT * FROM site_sales WHERE project_id=$1 ORDER BY sale_date DESC', [pid]) : pool.query("SELECT plot_number,plot_area,sale_amount,sale_date FROM site_sales WHERE project_id=$1 ORDER BY sale_date DESC", [pid])
     ]);
 
     const p = project.rows[0];
     const invs = investments.rows;
-    const txns = transactions.rows;
+    // Always compute financials from ALL transactions (correct for everyone)
+    const allTxns = allTransactions.rows;
+    // Investors only see capital_in and income in the ledger (not expense details)
+    const txns = isAdmin ? allTxns : allTxns.filter(t => ['capital_in','income'].includes(t.type)).map(t => ({
+      id: t.id, type: t.type, category: t.category, amount: t.amount,
+      description: t.description, transaction_date: t.transaction_date, reference: t.reference
+    }));
     const totalCapital = invs.reduce((s, i) => s + Number(i.amount), 0);
-    const totalExpense = txns.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
+    const totalExpense = allTxns.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
     const totalIncome = sales.rows.reduce((s, r) => s + Number(r.sale_amount), 0);
     // Net Profit = Sales Income - Expenses only.
     // Capital raised is investors' principal (returned separately) — not deducted from profit.
